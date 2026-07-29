@@ -3,24 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talk-to-Me (Dauerfunk)</title>
+    <title>Talk-to-Me (500m Live-Funk)</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
         body { background: #0f172a; color: #fff; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; text-align: center; padding: 20px; }
-        
-        /* Start-Overlay um Browser-Blockade zu umgehen */
-        #start-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 999; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; padding: 20px;
-        }
-        #start-btn {
-            padding: 20px 40px; font-size: 20px; font-weight: bold;
-            background: #22c55e; color: white; border: none; border-radius: 50px;
-            box-shadow: 0 0 20px #22c55e; cursor: pointer; margin-top: 20px;
-        }
-
+        #start-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #start-btn { padding: 20px 40px; font-size: 20px; font-weight: bold; background: #22c55e; color: white; border: none; border-radius: 50px; cursor: pointer; margin-top: 20px; box-shadow: 0 0 20px #22c55e; }
         .card { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 350px; }
         .status-dot { width: 15px; height: 15px; background: #ef4444; border-radius: 50%; display: inline-block; margin-right: 8px; }
         .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
@@ -29,48 +19,75 @@
 </head>
 <body>
 
-    <!-- Pflicht-Klick für Handys zum Freischalten von Sound -->
     <div id="start-overlay">
-        <h2>Talk-to-Me Raum-Funk</h2>
-        <p style="margin-top: 10px; color: #aaa;">Tippe auf Start, um Ton & Mikrofon zu aktivieren.</p>
+        <h2>500m Live-Funkgerät</h2>
+        <p style="margin-top: 10px; color: #aaa;">Tippe auf Start für direkte Tonverbindung</p>
         <button id="start-btn" onclick="initApp()">FUNK STARTEN</button>
     </div>
 
     <div class="card">
-        <h2><span id="dot" class="status-dot"></span> 500m Dauerfunk</h2>
+        <h2><span id="dot" class="status-dot"></span> Raum-Funk</h2>
         <p id="status-text" style="margin-top: 10px; font-size: 14px;">Warte auf Start...</p>
         <div id="log"></div>
     </div>
 
+    <!-- Verstecktes Element zum Abspielen des empfangenen Sounds -->
+    <audio id="remoteAudio" autoplay></audio>
+
     <script>
         const API_URL = "https://talk-to-me-spcc.onrender.com";
         const socket = io(API_URL, { transports: ['websocket', 'polling'] });
+        let peer = null;
+        let localStream = null;
         let myLat = null;
         let myLon = null;
-        let audioContext = null;
 
-        function initApp() {
-            // 1. AudioContext erzeugen (schaltet Ton auf iOS/Android frei)
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            audioContext.resume();
-
-            // Overlay ausblenden
+        async function initApp() {
             document.getElementById("start-overlay").style.display = "none";
-            log("Starte GPS und Mikrofon...");
+            log("Starte Mikrofon...");
 
-            startGPS();
-            startMic();
+            try {
+                // Mikrofon-Stream holen
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                log("Mikrofon bereit.");
+
+                // PeerJS Instanz mit zufälliger ID erstellen
+                peer = new Peer();
+
+                peer.on('open', (id) => {
+                    log("Verbindungscode: " + id.substring(0, 5));
+                    startGPS(id);
+                });
+
+                // Eingehende Live-Anrufe automatisch annehmen
+                peer.on('call', (call) => {
+                    log("🔊 Eingehendes Audio-Signal empfangen!");
+                    call.answer(localStream);
+                    
+                    call.on('stream', (remoteStream) => {
+                        const audio = document.getElementById("remoteAudio");
+                        audio.srcObject = remoteStream;
+                        audio.play();
+                    });
+                });
+
+            } catch (err) {
+                log("Mikrofon-Fehler: " + err);
+            }
         }
 
-        function startGPS() {
+        function startGPS(peerId) {
             if (navigator.geolocation) {
                 navigator.geolocation.watchPosition(
                     (pos) => {
                         myLat = pos.coords.latitude;
                         myLon = pos.coords.longitude;
-                        socket.emit('update_location', { lat: myLat, lon: myLon });
+                        
+                        // Standort & Peer-ID an Server senden
+                        socket.emit('register_peer', { peer_id: peerId, lat: myLat, lon: myLon });
+                        
                         document.getElementById("dot").classList.add("active");
-                        document.getElementById("status-text").innerText = "Dauerhaft LIVE";
+                        document.getElementById("status-text").innerText = "Dauerhaft LIVE (WebRTC)";
                     },
                     (err) => { alert("GPS aktivieren!"); },
                     { enableHighAccuracy: true }
@@ -78,47 +95,20 @@
             }
         }
 
-        function startMic() {
-            // Bestimme passendes Format für Android vs. iPhone
-            let mimeType = 'audio/webm';
-            if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                    mimeType = 'audio/mp4';
-                } else if (MediaRecorder.isTypeSupported('audio/aac')) {
-                    mimeType = 'audio/aac';
-                }
-            }
-
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    log(`Mikrofon aktiv (${mimeType})`);
-                    const mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-
-                    mediaRecorder.ondataavailable = (event) => {
-                        if (event.data.size > 0 && socket.connected && myLat && myLon) {
-                            const reader = new FileReader();
-                            reader.readAsDataURL(event.data);
-                            reader.onloadend = () => {
-                                socket.emit('audio_stream', reader.result);
-                            };
-                        }
-                    };
-
-                    // Sendet alle 400ms Audio-Happen
-                    mediaRecorder.start(400);
-                })
-                .catch(err => {
-                    log("Fehler: Mikrofonzugriff verweigert!");
-                });
-        }
-
-        // Live-Audio empfangen & abspielen
-        socket.on('live_audio', (data) => {
-            log(`🔊 Signal empfangen (${data.distance}m entfernt)`);
+        // Andere Handys im 500m Radius automatisch anrufen
+        socket.on('connect_to_peers', (data) => {
+            if (!data.peers) return;
             
-            const audio = new Audio(data.stream);
-            audio.play().catch(e => {
-                log("Ton-Blockade! Bitte einmal den Bildschirm berühren.");
+            data.peers.forEach(remotePeerId => {
+                log("Verbinde direkt mit Gerät in der Nähe...");
+                const call = peer.call(remotePeerId, localStream);
+                
+                call.on('stream', (remoteStream) => {
+                    log("🔊 Audio-Stream verbunden!");
+                    const audio = document.getElementById("remoteAudio");
+                    audio.srcObject = remoteStream;
+                    audio.play();
+                });
             });
         });
 
