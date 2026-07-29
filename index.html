@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Talk-to-Me (500m Live-Funk)</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
@@ -34,43 +33,51 @@
     <div id="audioContainer"></div>
 
     <script>
-        const API_URL = "https://talk-to-me-spcc.onrender.com";
-        const socket = io(API_URL, { transports: ['websocket', 'polling'] });
         let peer = null;
         let localStream = null;
-        let myLat = null;
-        let myLon = null;
+
+        // Eindeutige IDs für Gerät 1 (Master) und Gerät 2 (Client)
+        // Das erste Gerät wird automatisch zum Raum-Host
+        const ROOM_HOST_ID = "talktome-live-room-host";
+        const MY_RANDOM_ID = "peer_" + Math.floor(Math.random() * 90000 + 10000);
 
         async function initApp() {
             document.getElementById("start-overlay").style.display = "none";
             log("Starte Mikrofon...");
 
             try {
-                // Audio-Einstellungen für Handys optimieren (Echo- & Rauschunterdrückung)
                 localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }, 
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
                     video: false 
                 });
                 log("Mikrofon bereit.");
 
-                peer = new Peer();
+                // Versuch 1: Versuche der Master-Host zu werden
+                peer = new Peer(ROOM_HOST_ID);
 
                 peer.on('open', (id) => {
-                    log("Verbindungscode: " + id.substring(0, 5));
-                    startGPS(id);
+                    log("🟢 Du bist der Raum-Host (Warte auf andere)...");
+                    document.getElementById("dot").classList.add("active");
+                    document.getElementById("status-text").innerText = "Dauerhaft LIVE (Host)";
                 });
 
-                // Eingehende Anrufe annehmen
+                // Falls ID schon vergeben ist (weil Gerät 1 schon online ist), schalte auf Client um
+                peer.on('error', (err) => {
+                    if (err.type === 'unavailable-id') {
+                        log("Raum-Host gefunden. Verbinde...");
+                        connectAsClient();
+                    } else {
+                        log("Fehler: " + err);
+                    }
+                });
+
+                // Eingehende Anrufe empfangen (wenn andere dich anrufen)
                 peer.on('call', (call) => {
-                    log("🔊 Eingehendes Signal...");
+                    log("🔊 Eingehender Anruf! Antworte...");
                     call.answer(localStream);
                     
                     call.on('stream', (remoteStream) => {
-                        playRemoteAudio(call.peer, remoteStream);
+                        playAudio(call.peer, remoteStream);
                     });
                 });
 
@@ -79,8 +86,33 @@
             }
         }
 
-        function playRemoteAudio(peerId, stream) {
-            log("🔊 Audio-Verbindung aktiv!");
+        function connectAsClient() {
+            // Mit eigener ID neu starten und den Host anrufen
+            peer = new Peer(MY_RANDOM_ID);
+
+            peer.on('open', (id) => {
+                log("Verbunden als Teilhaber.");
+                document.getElementById("dot").classList.add("active");
+                document.getElementById("status-text").innerText = "Dauerhaft LIVE (Client)";
+
+                log("Rufe Raum-Host an...");
+                const call = peer.call(ROOM_HOST_ID, localStream);
+
+                call.on('stream', (remoteStream) => {
+                    playAudio(ROOM_HOST_ID, remoteStream);
+                });
+            });
+
+            peer.on('call', (call) => {
+                call.answer(localStream);
+                call.on('stream', (remoteStream) => {
+                    playAudio(call.peer, remoteStream);
+                });
+            });
+        }
+
+        function playAudio(peerId, stream) {
+            log("🔊 AUDIO LIVE VERBUNDEN!");
             let audio = document.getElementById("audio_" + peerId);
             if (!audio) {
                 audio = document.createElement("audio");
@@ -90,47 +122,8 @@
                 document.getElementById("audioContainer").appendChild(audio);
             }
             audio.srcObject = stream;
-            
-            // Versuche das Abspielen explizit zu erzwingen
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    log("Ton blockiert: Bitte tippe 1x auf den Bildschirm.");
-                    document.body.addEventListener('click', () => { audio.play(); }, { once: true });
-                });
-            }
+            audio.play().catch(e => log("Klicke 1x ins Bild für Ton."));
         }
-
-        function startGPS(peerId) {
-            if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(
-                    (pos) => {
-                        myLat = pos.coords.latitude;
-                        myLon = pos.coords.longitude;
-                        
-                        socket.emit('register_peer', { peer_id: peerId, lat: myLat, lon: myLon });
-                        
-                        document.getElementById("dot").classList.add("active");
-                        document.getElementById("status-text").innerText = "Dauerhaft LIVE (WebRTC)";
-                    },
-                    (err) => { alert("Bitte GPS aktivieren!"); },
-                    { enableHighAccuracy: true }
-                );
-            }
-        }
-
-        socket.on('connect_to_peers', (data) => {
-            if (!data.peers) return;
-            
-            data.peers.forEach(remotePeerId => {
-                log("Verbinde mit Partner...");
-                const call = peer.call(remotePeerId, localStream);
-                
-                call.on('stream', (remoteStream) => {
-                    playRemoteAudio(remotePeerId, remoteStream);
-                });
-            });
-        });
 
         function log(msg) {
             const l = document.getElementById("log");
