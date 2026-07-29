@@ -31,8 +31,7 @@
         <div id="log"></div>
     </div>
 
-    <!-- Verstecktes Element zum Abspielen des empfangenen Sounds -->
-    <audio id="remoteAudio" autoplay></audio>
+    <div id="audioContainer"></div>
 
     <script>
         const API_URL = "https://talk-to-me-spcc.onrender.com";
@@ -47,11 +46,17 @@
             log("Starte Mikrofon...");
 
             try {
-                // Mikrofon-Stream holen
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                // Audio-Einstellungen für Handys optimieren (Echo- & Rauschunterdrückung)
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }, 
+                    video: false 
+                });
                 log("Mikrofon bereit.");
 
-                // PeerJS Instanz mit zufälliger ID erstellen
                 peer = new Peer();
 
                 peer.on('open', (id) => {
@@ -59,20 +64,40 @@
                     startGPS(id);
                 });
 
-                // Eingehende Live-Anrufe automatisch annehmen
+                // Eingehende Anrufe annehmen
                 peer.on('call', (call) => {
-                    log("🔊 Eingehendes Audio-Signal empfangen!");
+                    log("🔊 Eingehendes Signal...");
                     call.answer(localStream);
                     
                     call.on('stream', (remoteStream) => {
-                        const audio = document.getElementById("remoteAudio");
-                        audio.srcObject = remoteStream;
-                        audio.play();
+                        playRemoteAudio(call.peer, remoteStream);
                     });
                 });
 
             } catch (err) {
                 log("Mikrofon-Fehler: " + err);
+            }
+        }
+
+        function playRemoteAudio(peerId, stream) {
+            log("🔊 Audio-Verbindung aktiv!");
+            let audio = document.getElementById("audio_" + peerId);
+            if (!audio) {
+                audio = document.createElement("audio");
+                audio.id = "audio_" + peerId;
+                audio.autoplay = true;
+                audio.setAttribute("playsinline", "true");
+                document.getElementById("audioContainer").appendChild(audio);
+            }
+            audio.srcObject = stream;
+            
+            // Versuche das Abspielen explizit zu erzwingen
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    log("Ton blockiert: Bitte tippe 1x auf den Bildschirm.");
+                    document.body.addEventListener('click', () => { audio.play(); }, { once: true });
+                });
             }
         }
 
@@ -83,31 +108,26 @@
                         myLat = pos.coords.latitude;
                         myLon = pos.coords.longitude;
                         
-                        // Standort & Peer-ID an Server senden
                         socket.emit('register_peer', { peer_id: peerId, lat: myLat, lon: myLon });
                         
                         document.getElementById("dot").classList.add("active");
                         document.getElementById("status-text").innerText = "Dauerhaft LIVE (WebRTC)";
                     },
-                    (err) => { alert("GPS aktivieren!"); },
+                    (err) => { alert("Bitte GPS aktivieren!"); },
                     { enableHighAccuracy: true }
                 );
             }
         }
 
-        // Andere Handys im 500m Radius automatisch anrufen
         socket.on('connect_to_peers', (data) => {
             if (!data.peers) return;
             
             data.peers.forEach(remotePeerId => {
-                log("Verbinde direkt mit Gerät in der Nähe...");
+                log("Verbinde mit Partner...");
                 const call = peer.call(remotePeerId, localStream);
                 
                 call.on('stream', (remoteStream) => {
-                    log("🔊 Audio-Stream verbunden!");
-                    const audio = document.getElementById("remoteAudio");
-                    audio.srcObject = remoteStream;
-                    audio.play();
+                    playRemoteAudio(remotePeerId, remoteStream);
                 });
             });
         });
