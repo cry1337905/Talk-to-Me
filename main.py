@@ -1,93 +1,46 @@
-import asyncio
-import math
 import os
-import aiosqlite
-import websockets
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371000
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
+app = Flask(__name__)
 
-    a = math.sin(delta_phi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+# WICHTIG: CORS erlaubt deiner HTML-App (auch vom Handy), auf das Backend zuzugreifen
+CORS(app)
 
-    return R * c
-
-async def init_db():
-    async with aiosqlite.connect("positions.db") as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS positions (
-                user_id TEXT PRIMARY KEY,
-                latitude REAL,
-                longitude REAL
-            )
-        """)
-        await db.commit()
-
-async def save_position(user_id, lat, lon):
-    async with aiosqlite.connect("positions.db") as db:
-        await db.execute("INSERT OR REPLACE INTO positions VALUES (?, ?, ?)", (user_id, lat, lon))
-        await db.commit()
-
-async def get_nearby_users(my_lat, my_lon):
-    nearby = []
-    async with aiosqlite.connect("positions.db") as db:
-        async with db.execute("SELECT user_id, latitude, longitude FROM positions") as cursor:
-            async for row in cursor:
-                user_id, lat, lon = row
-                dist = haversine(my_lat, my_lon, lat, lon)
-                if dist <= 500:
-                    nearby.append(user_id)
-    return nearby
-
-connected_clients = {}
-
-async def handler(websocket):
+# Haupt-Route für den Chat (passend zum HTML-Fetch an /chat)
+@app.route('/chat', methods=['POST'])
+def chat():
     try:
-        async for message in websocket:
-            data = message.split(';')
-            if len(data) >= 3:
-                user_id = data[0]
-                lat = float(data[1])
-                lon = float(data[2])
+        # Daten aus der HTML-Anfrage auslesen
+        data = request.get_json()
+        
+        if not data or 'message' not in data:
+            return jsonify({'reply': 'Keine Nachricht empfangen.'}), 400
 
-                await save_position(user_id, lat, lon)
-                connected_clients[user_id] = websocket
+        user_message = data.get('message')
+        
+        # Hier findet die Verarbeitung der Nachricht statt!
+        # Aktuell antwortet der Server dynamisch basierend auf der Eingabe:
+        reply_text = f"Server hat empfangen: '{user_message}'"
+        
+        # Beispiel für einfache Antworten (kannst du beliebig anpassen):
+        if "hallo" in user_message.lower():
+            reply_text = "Hallo! Wie kann ich dir heute helfen?"
+        elif "wie geht" in user_message.lower():
+            reply_text = "Mir geht es super, ich laufe stabil auf Render!"
 
-                nearby_users = await get_nearby_users(lat, lon)
+        # Antwort im JSON-Format an das Handy zurückschicken
+        return jsonify({'reply': reply_text}), 200
 
-                if len(data) > 3:
-                    chat_message = data[3]
-                    for other_user_id in nearby_users:
-                        if other_user_id in connected_clients:
-                            try:
-                                await connected_clients[other_user_id].send(f"[Chat] {user_id}: {chat_message}")
-                            except websockets.exceptions.ConnectionClosed:
-                                connected_clients.pop(other_user_id, None)
-                else:
-                    for other_user_id in nearby_users:
-                        if other_user_id in connected_clients:
-                            try:
-                                await connected_clients[other_user_id].send(f"Fahrzeug {user_id} ist in deiner Nähe.")
-                            except websockets.exceptions.ConnectionClosed:
-                                connected_clients.pop(other_user_id, None)
+    except Exception as e:
+        return jsonify({'reply': f'Fehler im Server: {str(e)}'}), 500
 
-                await websocket.send(f"Aktive Fahrzeuge in deiner Nähe: {', '.join(nearby_users)}")
-    finally:
-        for user_id, ws in connected_clients.items():
-            if ws == websocket:
-                connected_clients.pop(user_id, None)
-                break
+# Test-Route um zu prüfen, ob der Server grundsätzlich läuft
+@app.route('/', methods=['GET'])
+def home():
+    return "Talk-to-Me Backend läuft erfolgreich!", 200
 
-async def main():
-    await init_db()
-    # Liest den Port von Render aus (Standard ist sonst 8765)
-    port = int(os.environ.get("PORT", 8765))
-    async with websockets.serve(handler, "0.0.0.0", port):
-        await asyncio.Future()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    # Render weist deiner App automatisch einen PORT über Umgebungsvariablen zu
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
