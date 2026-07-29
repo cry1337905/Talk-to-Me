@@ -3,181 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talk-to-Me (500m Voice Walkie-Talkie)</title>
+    <title>Talk-to-Me (Dauerhafter Raum-Funk)</title>
+    <!-- Socket.io Bibliothek für Live-Streaming -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: #111; color: #fff; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: space-between; padding: 20px 10px; }
-        header { text-align: center; }
-        #status { font-size: 13px; color: #00ff88; margin-top: 5px; }
-        #log { flex: 1; width: 100%; max-width: 400px; margin: 20px 0; overflow-y: auto; background: #222; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-        .audio-item { background: #333; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
-        
-        /* Walkie-Talkie Button Styling */
-        #talkBtn {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            border: none;
-            background: #e74c3c;
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            box-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
-            cursor: pointer;
-            user-select: none;
-            outline: none;
-        }
-        #talkBtn.recording {
-            background: #2ecc71;
-            box-shadow: 0 0 30px rgba(46, 204, 113, 0.9);
-            transform: scale(1.05);
-        }
+        body { background: #0f172a; color: #fff; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+        .card { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 350px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .status-dot { width: 15px; height: 15px; background: #ef4444; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+        #log { margin-top: 20px; font-size: 13px; color: #94a3b8; text-align: left; height: 150px; overflow-y: auto; background: #0f172a; padding: 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <header>
-        <h2>500m Funkgerät</h2>
-        <div id="status">Warte auf GPS und Mikrofon...</div>
-    </header>
-
-    <div id="log">
-        <div class="audio-item">Drücke den Knopf zum Sprechen...</div>
+    <div class="card">
+        <h2><span id="dot" class="status-dot"></span> 500m Dauerfunk</h2>
+        <p id="status-text" style="margin-top: 10px; font-size: 14px;">Initalisiere...</p>
+        
+        <div id="log">
+            <div>Warte auf Mikrofon-Freigabe...</div>
+        </div>
     </div>
-
-    <button id="talkBtn" onclick="toggleRecording()">SPRECHEN</button>
 
     <script>
         const API_URL = "https://talk-to-me-spcc.onrender.com";
-        const myUserId = "Funk_" + Math.floor(Math.random() * 1000);
+        const socket = io(API_URL, { transports: ['websocket', 'polling'] });
         let myLat = null;
         let myLon = null;
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let isRecording = false;
-        let lastAudioId = 0;
 
-        // 1. GPS Abfragen
+        // 1. Verbindung zum Server herstellen
+        socket.on('connect', () => {
+            log("Am Server angemeldet.");
+        });
+
+        // 2. GPS durchgehend überwachen
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
                 (pos) => {
                     myLat = pos.coords.latitude;
                     myLon = pos.coords.longitude;
-                    document.getElementById("status").innerText = `GPS Aktiv | ID: ${myUserId}`;
-                    updateLocation();
+                    socket.emit('update_location', { lat: myLat, lon: myLon });
+                    document.getElementById("dot").classList.add("active");
+                    document.getElementById("status-text").innerText = "Dauerhaft LIVE (Mikrofon aktiv)";
                 },
-                (err) => { document.getElementById("status").innerText = "Bitte GPS aktivieren!"; },
+                (err) => { alert("Bitte Standort/GPS aktivieren!"); },
                 { enableHighAccuracy: true }
             );
         }
 
-        // 2. Mikrofon vorbereiten
+        // 3. Mikrofon DAUERHAFT öffnen und in Echtzeit absenden
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
+                log("Mikrofon aktiv. Du bist hörbar!");
                 
-                mediaRecorder.ondataavailable = e => {
-                    audioChunks.push(e.data);
+                // Nutzt den MediaRecorder mit sehr kurzen Abschnitten (200ms) für Echtzeit-Streaming
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && socket.connected && myLat && myLon) {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(event.data);
+                        reader.onloadend = () => {
+                            // Sendet kleine Audio-Pakete alle 200 Millisekunden direkt weiter
+                            socket.emit('audio_stream', reader.result);
+                        };
+                    }
                 };
 
-                mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    audioChunks = [];
-                    
-                    // In Base64 umwandeln und senden
-                    const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = async () => {
-                        const base64Audio = reader.result;
-                        await sendAudioToServer(base64Audio);
-                    };
-                };
+                // Alle 200 Millisekunden Audiodaten rausschicken (Quasi-Live-Stream)
+                mediaRecorder.start(200);
             })
             .catch(err => {
-                alert("Mikrofon-Zugriff verweigert oder nicht unterstützt!");
+                log("Fehler: Mikrofonzugriff verweigert!");
+                alert("Mikrofon wird für den Dauerfunk benötigt.");
             });
 
-        function toggleRecording() {
-            if (!mediaRecorder) return alert("Mikrofon noch nicht bereit!");
-            const btn = document.getElementById("talkBtn");
+        // 4. Live-Audio von Personen in der Nähe empfangen und sofort abspielen
+        socket.on('live_audio', (data) => {
+            log(`🔊 Höre ID ${data.sender_id} (${data.distance}m entfernt)`);
+            const audio = new Audio(data.stream);
+            audio.play().catch(e => console.log(e));
+        });
 
-            if (!isRecording) {
-                // Aufnahme starten
-                audioChunks = [];
-                mediaRecorder.start();
-                isRecording = true;
-                btn.innerText = "AUFNAHME...";
-                btn.classList.add("recording");
-            } else {
-                // Aufnahme stoppen & absenden
-                mediaRecorder.stop();
-                isRecording = false;
-                btn.innerText = "SPRECHEN";
-                btn.classList.remove("recording");
-            }
+        function log(msg) {
+            const l = document.getElementById("log");
+            l.innerHTML += `<div>> ${msg}</div>`;
+            l.scrollTop = l.scrollHeight;
         }
-
-        async function updateLocation() {
-            if (!myLat || !myLon) return;
-            await fetch(`${API_URL}/update-location`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: myUserId, lat: myLat, lon: myLon })
-            });
-        }
-
-        async function sendAudioToServer(base64Audio) {
-            if (!myLat || !myLon) return;
-            await fetch(`${API_URL}/send-audio`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: myUserId, audio: base64Audio, lat: myLat, lon: myLon })
-            });
-        }
-
-        // 3. Nach neuen Sprachnachrichten im Umkreis suchen & automatisch abspielen
-        async function checkNearbyAudio() {
-            if (!myLat || !myLon) return;
-
-            try {
-                const res = await fetch(`${API_URL}/get-nearby-audio`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ lat: myLat, lon: myLon, last_id: lastAudioId })
-                });
-
-                const data = await res.json();
-
-                if (data.messages && data.messages.length > 0) {
-                    data.messages.forEach(msg => {
-                        lastAudioId = Math.max(lastAudioId, msg.id);
-
-                        // Selbst gesendete Nachrichten nicht erneut abspielen
-                        if (msg.user_id !== myUserId) {
-                            addLog(`🔊 ${msg.user_id} (${msg.distance_m}m entfernt) spricht...`);
-                            
-                            // Audio automatisch abspielen
-                            const audio = new Audio(msg.audio);
-                            audio.play().catch(e => console.log("Autoplay blockiert:", e));
-                        }
-                    });
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        function addLog(text) {
-            const log = document.getElementById("log");
-            const div = document.createElement("div");
-            div.className = "audio-item";
-            div.innerText = text;
-            log.appendChild(div);
-            log.scrollTop = log.scrollHeight;
-        }
-
-        // Alle 2 Sekunden nach Sprachnachrichten im Umkreis suchen
-        setInterval(checkNearbyAudio, 2000);
     </script>
 </body>
 </html>
