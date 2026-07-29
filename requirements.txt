@@ -1,6 +1,4 @@
 Flask
 flask-cors
 flask-socketio
-python-socketio
 gunicorn
-eventlet
