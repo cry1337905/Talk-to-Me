@@ -3,4 +3,5 @@ flask-cors==4.0.0
 flask-socketio==5.3.6
 python-socketio==5.11.0
 gunicorn==21.2.0
-eventlet==0.35.2
+gevent==24.2.1
+gevent-websocket==0.10.1
