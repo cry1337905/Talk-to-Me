@@ -1,15 +1,14 @@
 {
-  "name": "Talk-to-Me 500m",
-  "short_name": "TalkToMe",
-  "start_url": "./index.html",
+  "background_color": "#ffffff",
+  "dir": "ltr",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#22c55e",
-  "icons": [
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/3616/3616930.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "name": "TalkToMe",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "TalkToMe",
+  "start_url": "https://cry1337905.github.io/Talk-to-Me/",
+  "theme_color": "#ffffff",
+  "id": "TalkToMe",
+  "lang": "de",
+  "description": "Eine Sprach-App zur Kommunikation."
 }
