@@ -269,7 +269,7 @@
     </footer>
 
     <script>
-        // Deine echte Cloud-Adresse von Render.com:
+        // Deine Render.com WebSocket Cloud-Adresse
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
         const talkBtn = document.getElementById('talkBtn');
@@ -285,7 +285,17 @@
         let audioContext = null;
         let mediaRecorder = null;
 
-        // Verbindung zum Python-Server auf Render herstellen
+        // Entsperrt das Audio-System im Handy durch den Nutzerklick
+        function unlockAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        // Verbindung zum Python Server herstellen
         function connectToServer() {
             socket = new WebSocket(RENDER_WEBSOCKET_URL);
 
@@ -296,7 +306,7 @@
             };
 
             socket.onmessage = async (event) => {
-                // 1. Nachrichten im Textformat (z. B. GPS / Umkreis-Zähler)
+                // 1. Textnachrichten (GPS/Radar-Zähler)
                 if (typeof event.data === "string") {
                     try {
                         const data = JSON.parse(event.data);
@@ -307,7 +317,7 @@
                         console.error("JSON Fehler:", e);
                     }
                 } 
-                // 2. Empfangenes Audio von anderen Handys abspielen (Binärdaten)
+                // 2. Empfangene Audiodaten von anderen Nutzern
                 else if (event.data instanceof Blob) {
                     playIncomingAudio(event.data);
                 }
@@ -337,45 +347,56 @@
                         socket.send(JSON.stringify(gpsData));
                     }
                 }, (err) => {
-                    console.warn("GPS nicht freigegeben:", err);
-                }, { enableHighAccuracy: false, timeout: 5000 });
+                    console.warn("GPS-Fehler:", err);
+                }, { enableHighAccuracy: true, timeout: 10000 });
             }
         }
 
-        // Audio aufnehmen & an Python-Server senden
+        // Audio aufnehmen & senden
         function startAudioStreaming() {
             if (!mediaStream) return;
 
-            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'audio/webm' });
+            // Unterstützten Audiotyp ermitteln (Safari/iOS vs Chrome/Android)
+            let options = {};
+            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                options = { mimeType: 'audio/webm;codecs=opus' };
+            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                options = { mimeType: 'audio/mp4' };
+            }
+
+            try {
+                mediaRecorder = new MediaRecorder(mediaStream, options);
+            } catch (e) {
+                mediaRecorder = new MediaRecorder(mediaStream);
+            }
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(event.data); // Audio-Chunk an Python-Server schicken
+                    socket.send(event.data);
                 }
             };
 
-            // Alle 250ms ein kleines Sprach-Paket senden
+            // Alle 250ms Audioblöcke senden
             mediaRecorder.start(250);
         }
 
         // Empfangene Audio-Daten laut abspielen
         async function playIncomingAudio(blob) {
             try {
+                unlockAudioContext();
                 const arrayBuffer = await blob.arrayBuffer();
-                if (!audioContext) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
                 source.start(0);
             } catch (e) {
-                console.error("Audio-Wiedergabe Fehler:", e);
+                console.error("Audio-Abspiel-Fehler:", e);
             }
         }
 
-        // Trennen
+        // Verbindung sauber trennen
         function disconnect() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
@@ -395,15 +416,22 @@
             nearbyCount.textContent = "0";
         }
 
-        // Button Event
+        // Hauptbutton Klick-Event
         talkBtn.addEventListener('click', async () => {
+            // Audio-Wiedergabe durch Klick für Handys freischalten
+            unlockAudioContext();
+
             if (!isConnected) {
                 try {
                     statusText.textContent = "Verbinde...";
 
-                    // Mikrofon abfragen
+                    // Mikrofon anfordern
                     mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true }, 
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }, 
                         video: false 
                     });
 
@@ -418,8 +446,9 @@
                     btnLabel.textContent = "TRENNEN";
 
                 } catch (err) {
-                    console.error("Fehler beim Starten:", err);
-                    statusText.textContent = "Mikrofon-Fehler";
+                    console.error("Fehler bei Freigabe:", err);
+                    alert("Bitte erlaube Zugriff auf Mikrofon und Standort in den Browser-Einstellungen.");
+                    statusText.textContent = "Blockiert";
                     statusDot.className = "status-dot";
                 }
             } else {
@@ -427,8 +456,17 @@
             }
         });
 
+        // Standort-Berechtigung direkt beim Laden der Seite anfragen
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => console.log("GPS ok"),
+                    (err) => console.warn("GPS Berechtigung fehlt"),
+                    { enableHighAccuracy: true }
+                );
+            }
         });
     </script>
 </body>
