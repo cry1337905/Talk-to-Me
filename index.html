@@ -265,10 +265,13 @@
     </main>
 
     <footer>
-        <p>Echtzeit Audio-Funkverbindung</p>
+        <p>Echtzeit Cloud Audio-Funkverbindung</p>
     </footer>
 
     <script>
+        // Deine echte Cloud-Adresse von Render.com:
+        const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
+
         const talkBtn = document.getElementById('talkBtn');
         const btnWrapper = document.getElementById('btnWrapper');
         const btnLabel = document.getElementById('btnLabel');
@@ -278,40 +281,118 @@
 
         let isConnected = false;
         let mediaStream = null;
-        let userLocation = null;
+        let socket = null;
+        let audioContext = null;
+        let mediaRecorder = null;
 
-        // Haversine-Formel zur Abstandsberechnung in Metern zwischen zwei GPS-Punkten
-        function calculateDistanceInMeters(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Erdradius in Metern
-            const φ1 = lat1 * Math.PI / 180;
-            const φ2 = lat2 * Math.PI / 180;
-            const Δφ = (lat2 - lat1) * Math.PI / 180;
-            const Δλ = (lon2 - lon1) * Math.PI / 180;
+        // Verbindung zum Python-Server auf Render herstellen
+        function connectToServer() {
+            socket = new WebSocket(RENDER_WEBSOCKET_URL);
 
-            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            socket.onopen = () => {
+                console.log("Verbunden mit Cloud Server!");
+                sendLocation();
+                startAudioStreaming();
+            };
 
-            return R * c; // Distanz in Metern
+            socket.onmessage = async (event) => {
+                // 1. Nachrichten im Textformat (z. B. GPS / Umkreis-Zähler)
+                if (typeof event.data === "string") {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'nearby_count') {
+                            nearbyCount.textContent = data.count;
+                        }
+                    } catch (e) {
+                        console.error("JSON Fehler:", e);
+                    }
+                } 
+                // 2. Empfangenes Audio von anderen Handys abspielen (Binärdaten)
+                else if (event.data instanceof Blob) {
+                    playIncomingAudio(event.data);
+                }
+            };
+
+            socket.onerror = (err) => {
+                console.error("WebSocket Fehler:", err);
+                statusText.textContent = "Server-Fehler";
+            };
+
+            socket.onclose = () => {
+                console.log("Verbindung getrennt.");
+                if (isConnected) disconnect();
+            };
         }
 
-        // Standort abfragen
-        function getUserLocation() {
+        // Standort senden
+        function sendLocation() {
             if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        console.log("GPS Position ermittelt:", userLocation);
-                    },
-                    (error) => {
-                        console.warn("GPS Zugriff verweigert oder nicht verfügbar:", error);
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    const gpsData = {
+                        type: 'location',
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude
+                    };
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify(gpsData));
                     }
-                );
+                }, (err) => {
+                    console.warn("GPS nicht freigegeben:", err);
+                }, { enableHighAccuracy: false, timeout: 5000 });
             }
+        }
+
+        // Audio aufnehmen & an Python-Server senden
+        function startAudioStreaming() {
+            if (!mediaStream) return;
+
+            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'audio/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(event.data); // Audio-Chunk an Python-Server schicken
+                }
+            };
+
+            // Alle 250ms ein kleines Sprach-Paket senden
+            mediaRecorder.start(250);
+        }
+
+        // Empfangene Audio-Daten laut abspielen
+        async function playIncomingAudio(blob) {
+            try {
+                const arrayBuffer = await blob.arrayBuffer();
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+            } catch (e) {
+                console.error("Audio-Wiedergabe Fehler:", e);
+            }
+        }
+
+        // Trennen
+        function disconnect() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (socket) {
+                socket.close();
+            }
+
+            isConnected = false;
+            btnWrapper.classList.remove('active');
+            statusDot.className = "status-dot online";
+            statusText.textContent = "Bereit";
+            btnLabel.textContent = "VERBINDEN";
+            nearbyCount.textContent = "0";
         }
 
         // Button Event
@@ -319,12 +400,15 @@
             if (!isConnected) {
                 try {
                     statusText.textContent = "Verbinde...";
-                    
-                    // Mikrofon anfordern
-                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
-                    // GPS Position holen
-                    getUserLocation();
+                    // Mikrofon abfragen
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true }, 
+                        video: false 
+                    });
+
+                    // Server verbinden
+                    connectToServer();
 
                     isConnected = true;
                     btnWrapper.classList.add('active');
@@ -334,26 +418,17 @@
                     btnLabel.textContent = "TRENNEN";
 
                 } catch (err) {
-                    console.error("Fehler:", err);
-                    statusText.textContent = "Fehler";
+                    console.error("Fehler beim Starten:", err);
+                    statusText.textContent = "Mikrofon-Fehler";
                     statusDot.className = "status-dot";
                 }
             } else {
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(track => track.stop());
-                }
-                
-                isConnected = false;
-                btnWrapper.classList.remove('active');
-                statusDot.className = "status-dot online";
-                statusText.textContent = "Bereit";
-                btnLabel.textContent = "VERBINDEN";
+                disconnect();
             }
         });
 
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
-            getUserLocation();
         });
     </script>
 </body>
