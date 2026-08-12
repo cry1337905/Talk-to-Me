@@ -38,7 +38,6 @@
             overflow: hidden;
         }
 
-        /* Header / Status Bar */
         header {
             width: 100%;
             max-width: 400px;
@@ -113,7 +112,6 @@
             font-weight: 700;
         }
 
-        /* Main Content / Button Container */
         main {
             display: flex;
             justify-content: center;
@@ -129,7 +127,6 @@
             align-items: center;
         }
 
-        /* Pulsierende Wellen-Ringe */
         .pulse-ring {
             position: absolute;
             width: 180px;
@@ -149,7 +146,6 @@
             animation-delay: 0.6s;
         }
 
-        /* Haupt-Funkbutton */
         .talk-btn {
             width: 160px;
             height: 160px;
@@ -234,13 +230,11 @@
         <h1>TALK TO ME</h1>
         
         <div class="info-bar">
-            <!-- Status LED -->
             <div class="status-container">
                 <div class="status-dot" id="statusDot"></div>
                 <span class="status-text" id="statusText">Bereit</span>
             </div>
 
-            <!-- Umkreis Radar (500m) -->
             <div class="radar-container">
                 <svg class="radar-icon" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
@@ -269,7 +263,6 @@
     </footer>
 
     <script>
-        // Deine Render.com WebSocket Cloud-Adresse
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
         const talkBtn = document.getElementById('talkBtn');
@@ -283,10 +276,12 @@
         let mediaStream = null;
         let socket = null;
         let audioContext = null;
-        let mediaRecorder = null;
+        let audioProcessor = null;
+        let micSource = null;
+        let nextPlayTime = 0;
 
-        // Entsperrt das Audio-System im Handy durch den Nutzerklick
-        function unlockAudioContext() {
+        // Hilfsfunktion: Schaltet Handylautsprecher frei
+        function unlockAudio() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -295,18 +290,18 @@
             }
         }
 
-        // Verbindung zum Python Server herstellen
+        // WebSocket-Verbindung
         function connectToServer() {
             socket = new WebSocket(RENDER_WEBSOCKET_URL);
+            socket.binaryType = "arraybuffer";
 
             socket.onopen = () => {
-                console.log("Verbunden mit Cloud Server!");
+                console.log("WebSocket verbunden!");
                 sendLocation();
-                startAudioStreaming();
+                startPCMStreaming();
             };
 
             socket.onmessage = async (event) => {
-                // 1. Textnachrichten (GPS/Radar-Zähler)
                 if (typeof event.data === "string") {
                     try {
                         const data = JSON.parse(event.data);
@@ -316,10 +311,8 @@
                     } catch (e) {
                         console.error("JSON Fehler:", e);
                     }
-                } 
-                // 2. Empfangene Audiodaten von anderen Nutzern
-                else if (event.data instanceof Blob) {
-                    playIncomingAudio(event.data);
+                } else if (event.data instanceof ArrayBuffer) {
+                    playIncomingPCM(event.data);
                 }
             };
 
@@ -329,7 +322,6 @@
             };
 
             socket.onclose = () => {
-                console.log("Verbindung getrennt.");
                 if (isConnected) disconnect();
             };
         }
@@ -347,62 +339,93 @@
                         socket.send(JSON.stringify(gpsData));
                     }
                 }, (err) => {
-                    console.warn("GPS-Fehler:", err);
-                }, { enableHighAccuracy: true, timeout: 10000 });
+                    console.warn("GPS nicht verfügbar:", err);
+                }, { enableHighAccuracy: true });
             }
         }
 
-        // Audio aufnehmen & senden
-        function startAudioStreaming() {
-            if (!mediaStream) return;
+        // 🎙️ Nimmt rohes Audio (PCM) vom Mikrofon auf und sendet es
+        function startPCMStreaming() {
+            if (!mediaStream || !audioContext) return;
 
-            // Unterstützten Audiotyp ermitteln (Safari/iOS vs Chrome/Android)
-            let options = {};
-            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                options = { mimeType: 'audio/webm;codecs=opus' };
-            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                options = { mimeType: 'audio/mp4' };
-            }
+            micSource = audioContext.createMediaStreamSource(mediaStream);
+            // Buffer von 2048 ergibt kleine, flüssige Pakete
+            audioProcessor = audioContext.createScriptProcessor(2048, 1, 1);
 
-            try {
-                mediaRecorder = new MediaRecorder(mediaStream, options);
-            } catch (e) {
-                mediaRecorder = new MediaRecorder(mediaStream);
-            }
+            audioProcessor.onaudioprocess = (e) => {
+                if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(event.data);
+                const inputBuffer = e.inputBuffer.getChannelData(0);
+                
+                // Konvertierung von Float32 zu Int16 (spart Bandbreite)
+                const pcm16 = new Int16Array(inputBuffer.length);
+                for (let i = 0; i < inputBuffer.length; i++) {
+                    let s = Math.max(-1, Math.min(1, inputBuffer[i]));
+                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
+
+                // Paket zusammenbauen: Erster 4-Byte-Block = Abtastrate (z. B. 48000Hz)
+                const packet = new ArrayBuffer(4 + pcm16.length * 2);
+                const view = new DataView(packet);
+                view.setUint32(0, audioContext.sampleRate, true);
+                new Int16Array(packet, 4).set(pcm16);
+
+                socket.send(packet);
             };
 
-            // Alle 250ms Audioblöcke senden
-            mediaRecorder.start(250);
+            micSource.connect(audioProcessor);
+            audioProcessor.connect(audioContext.destination);
         }
 
-        // Empfangene Audio-Daten laut abspielen
-        async function playIncomingAudio(blob) {
+        // 🔊 Spielt empfangenes Raw-PCM-Audio nahtlos ab
+        function playIncomingPCM(arrayBuffer) {
+            unlockAudio();
+            if (!audioContext) return;
+
             try {
-                unlockAudioContext();
-                const arrayBuffer = await blob.arrayBuffer();
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                
+                const view = new DataView(arrayBuffer);
+                const remoteSampleRate = view.getUint32(0, true);
+                const int16 = new Int16Array(arrayBuffer, 4);
+
+                // Zurück zu Float32 konvertieren
+                const float32 = new Float32Array(int16.length);
+                for (let i = 0; i < int16.length; i++) {
+                    float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+                }
+
+                const audioBuffer = audioContext.createBuffer(1, float32.length, remoteSampleRate);
+                audioBuffer.getChannelData(0).set(float32);
+
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
-                source.start(0);
+
+                // Reibungslose Aneinanderreihung der Audiohappen ohne Knacken
+                const currentTime = audioContext.currentTime;
+                if (nextPlayTime < currentTime) {
+                    nextPlayTime = currentTime;
+                }
+                source.start(nextPlayTime);
+                nextPlayTime += audioBuffer.duration;
+
             } catch (e) {
-                console.error("Audio-Abspiel-Fehler:", e);
+                console.error("Audio-Wiedergabefehler:", e);
             }
         }
 
-        // Verbindung sauber trennen
+        // Trennen
         function disconnect() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
+            if (audioProcessor) {
+                audioProcessor.disconnect();
+                audioProcessor = null;
+            }
+            if (micSource) {
+                micSource.disconnect();
+                micSource = null;
             }
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
             if (socket) {
                 socket.close();
@@ -414,18 +437,17 @@
             statusText.textContent = "Bereit";
             btnLabel.textContent = "VERBINDEN";
             nearbyCount.textContent = "0";
+            nextPlayTime = 0;
         }
 
-        // Hauptbutton Klick-Event
+        // Button Click
         talkBtn.addEventListener('click', async () => {
-            // Audio-Wiedergabe durch Klick für Handys freischalten
-            unlockAudioContext();
+            unlockAudio();
 
             if (!isConnected) {
                 try {
                     statusText.textContent = "Verbinde...";
 
-                    // Mikrofon anfordern
                     mediaStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
                             echoCancellation: true, 
@@ -435,7 +457,6 @@
                         video: false 
                     });
 
-                    // Server verbinden
                     connectToServer();
 
                     isConnected = true;
@@ -446,9 +467,9 @@
                     btnLabel.textContent = "TRENNEN";
 
                 } catch (err) {
-                    console.error("Fehler bei Freigabe:", err);
-                    alert("Bitte erlaube Zugriff auf Mikrofon und Standort in den Browser-Einstellungen.");
-                    statusText.textContent = "Blockiert";
+                    console.error("Zugriff verweigert:", err);
+                    alert("Bitte erlaube Zugriff auf Mikrofon und Standort.");
+                    statusText.textContent = "Fehler";
                     statusDot.className = "status-dot";
                 }
             } else {
@@ -456,7 +477,7 @@
             }
         });
 
-        // Standort-Berechtigung direkt beim Laden der Seite anfragen
+        // Standort beim Laden anfordern
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
 
