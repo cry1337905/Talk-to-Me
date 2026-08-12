@@ -1,142 +1,360 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<link rel="manifest" href="manifest.json">
-<!-- Macht die Seite zur installierbaren Smartphone-App -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.json">
-
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talk-to-Me (500m Live-Funk)</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Talk to Me</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: #0f172a; color: #fff; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; text-align: center; padding: 20px; }
-        #start-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        #start-btn { padding: 20px 40px; font-size: 20px; font-weight: bold; background: #22c55e; color: white; border: none; border-radius: 50px; cursor: pointer; margin-top: 20px; box-shadow: 0 0 20px #22c55e; }
-        .card { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 350px; }
-        .status-dot { width: 15px; height: 15px; background: #ef4444; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
-        #log { margin-top: 20px; font-size: 13px; color: #94a3b8; text-align: left; height: 180px; overflow-y: auto; background: #0f172a; padding: 10px; border-radius: 10px; }
+        :root {
+            --bg-color: #0b0f17;
+            --card-bg: rgba(22, 30, 46, 0.7);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-cyan: #06b6d4;
+            --accent-glow: rgba(6, 182, 212, 0.4);
+            --active-red: #ef4444;
+            --active-glow: rgba(239, 68, 68, 0.5);
+            --status-green: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 16px;
+            overflow: hidden;
+        }
+
+        /* Header / Status Bar */
+        header {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, #fff 30%, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .info-bar {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .status-container, .radar-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--card-bg);
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-secondary);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .status-dot.online {
+            background-color: var(--status-green);
+            box-shadow: 0 0 8px var(--status-green);
+        }
+
+        .status-dot.active {
+            background-color: var(--active-red);
+            box-shadow: 0 0 10px var(--active-red);
+            animation: blink 1s infinite alternate;
+        }
+
+        .radar-icon {
+            width: 14px;
+            height: 14px;
+            fill: var(--accent-cyan);
+        }
+
+        .status-text, .radar-text {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .radar-count {
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        /* Main Content / Button Container */
+        main {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            flex: 1;
+        }
+
+        .talk-btn-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Pulsierende Wellen-Ringe */
+        .pulse-ring {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .talk-btn-wrapper.active .pulse-ring {
+            border-color: var(--active-red);
+            animation: pulse-wave 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        .talk-btn-wrapper.active .pulse-ring:nth-child(2) {
+            animation-delay: 0.6s;
+        }
+
+        /* Haupt-Funkbutton */
+        .talk-btn {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: none;
+            outline: none;
+            background: linear-gradient(145deg, #131b2e, #0b101d);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5),
+                        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .talk-btn svg {
+            width: 48px;
+            height: 48px;
+            fill: var(--text-secondary);
+            transition: fill 0.3s ease, transform 0.3s ease;
+        }
+
+        .talk-btn span {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .talk-btn:active {
+            transform: scale(0.95);
+        }
+
+        .talk-btn-wrapper.active .talk-btn {
+            background: linear-gradient(145deg, #1f1015, #2b090a);
+            box-shadow: 0 0 30px var(--active-glow),
+                        inset 0 0 15px var(--active-glow);
+        }
+
+        .talk-btn-wrapper.active .talk-btn svg {
+            fill: var(--active-red);
+            transform: scale(1.1);
+        }
+
+        .talk-btn-wrapper.active .talk-btn span {
+            color: var(--active-red);
+        }
+
+        footer {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        @keyframes pulse-wave {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+
+        @keyframes blink {
+            from { opacity: 1; }
+            to { opacity: 0.3; }
+        }
     </style>
 </head>
 <body>
 
-    <div id="start-overlay">
-        <h2>500m Live-Funkgerät</h2>
-        <p style="margin-top: 10px; color: #aaa;">Tippe auf Start für direkte Tonverbindung</p>
-        <button id="start-btn" onclick="initApp()">FUNK STARTEN</button>
-    </div>
+    <header>
+        <h1>TALK TO ME</h1>
+        
+        <div class="info-bar">
+            <!-- Status LED -->
+            <div class="status-container">
+                <div class="status-dot" id="statusDot"></div>
+                <span class="status-text" id="statusText">Bereit</span>
+            </div>
 
-    <div class="card">
-        <h2><span id="dot" class="status-dot"></span> Raum-Funk</h2>
-        <p id="status-text" style="margin-top: 10px; font-size: 14px;">Warte auf Start...</p>
-        <div id="log"></div>
-    </div>
+            <!-- Umkreis Radar (500m) -->
+            <div class="radar-container">
+                <svg class="radar-icon" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
+                </svg>
+                <span class="radar-text"><span class="radar-count" id="nearbyCount">0</span> in 500m</span>
+            </div>
+        </div>
+    </header>
 
-    <div id="audioContainer"></div>
+    <main>
+        <div class="talk-btn-wrapper" id="btnWrapper">
+            <div class="pulse-ring"></div>
+            <div class="pulse-ring"></div>
+            <button class="talk-btn" id="talkBtn">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                <span id="btnLabel">VERBINDEN</span>
+            </button>
+        </div>
+    </main>
+
+    <footer>
+        <p>Echtzeit Audio-Funkverbindung</p>
+    </footer>
 
     <script>
-        let peer = null;
-        let localStream = null;
+        const talkBtn = document.getElementById('talkBtn');
+        const btnWrapper = document.getElementById('btnWrapper');
+        const btnLabel = document.getElementById('btnLabel');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const nearbyCount = document.getElementById('nearbyCount');
 
-        // Eindeutige IDs für Gerät 1 (Master) und Gerät 2 (Client)
-        // Das erste Gerät wird automatisch zum Raum-Host
-        const ROOM_HOST_ID = "talktome-live-room-host";
-        const MY_RANDOM_ID = "peer_" + Math.floor(Math.random() * 90000 + 10000);
+        let isConnected = false;
+        let mediaStream = null;
+        let userLocation = null;
 
-        async function initApp() {
-            document.getElementById("start-overlay").style.display = "none";
-            log("Starte Mikrofon...");
+        // Haversine-Formel zur Abstandsberechnung in Metern zwischen zwei GPS-Punkten
+        function calculateDistanceInMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Erdradius in Metern
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
-                    video: false 
-                });
-                log("Mikrofon bereit.");
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-                // Versuch 1: Versuche der Master-Host zu werden
-                peer = new Peer(ROOM_HOST_ID);
+            return R * c; // Distanz in Metern
+        }
 
-                peer.on('open', (id) => {
-                    log("🟢 Du bist der Raum-Host (Warte auf andere)...");
-                    document.getElementById("dot").classList.add("active");
-                    document.getElementById("status-text").innerText = "Dauerhaft LIVE (Host)";
-                });
-
-                // Falls ID schon vergeben ist (weil Gerät 1 schon online ist), schalte auf Client um
-                peer.on('error', (err) => {
-                    if (err.type === 'unavailable-id') {
-                        log("Raum-Host gefunden. Verbinde...");
-                        connectAsClient();
-                    } else {
-                        log("Fehler: " + err);
+        // Standort abfragen
+        function getUserLocation() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        console.log("GPS Position ermittelt:", userLocation);
+                    },
+                    (error) => {
+                        console.warn("GPS Zugriff verweigert oder nicht verfügbar:", error);
                     }
-                });
+                );
+            }
+        }
 
-                // Eingehende Anrufe empfangen (wenn andere dich anrufen)
-                peer.on('call', (call) => {
-                    log("🔊 Eingehender Anruf! Antworte...");
-                    call.answer(localStream);
+        // Button Event
+        talkBtn.addEventListener('click', async () => {
+            if (!isConnected) {
+                try {
+                    statusText.textContent = "Verbinde...";
                     
-                    call.on('stream', (remoteStream) => {
-                        playAudio(call.peer, remoteStream);
-                    });
-                });
+                    // Mikrofon anfordern
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
-            } catch (err) {
-                log("Mikrofon-Fehler: " + err);
+                    // GPS Position holen
+                    getUserLocation();
+
+                    isConnected = true;
+                    btnWrapper.classList.add('active');
+                    statusDot.classList.remove('online');
+                    statusDot.classList.add('active');
+                    statusText.textContent = "LIVE";
+                    btnLabel.textContent = "TRENNEN";
+
+                } catch (err) {
+                    console.error("Fehler:", err);
+                    statusText.textContent = "Fehler";
+                    statusDot.className = "status-dot";
+                }
+            } else {
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                }
+                
+                isConnected = false;
+                btnWrapper.classList.remove('active');
+                statusDot.className = "status-dot online";
+                statusText.textContent = "Bereit";
+                btnLabel.textContent = "VERBINDEN";
             }
-        }
+        });
 
-        function connectAsClient() {
-            // Mit eigener ID neu starten und den Host anrufen
-            peer = new Peer(MY_RANDOM_ID);
-
-            peer.on('open', (id) => {
-                log("Verbunden als Teilhaber.");
-                document.getElementById("dot").classList.add("active");
-                document.getElementById("status-text").innerText = "Dauerhaft LIVE (Client)";
-
-                log("Rufe Raum-Host an...");
-                const call = peer.call(ROOM_HOST_ID, localStream);
-
-                call.on('stream', (remoteStream) => {
-                    playAudio(ROOM_HOST_ID, remoteStream);
-                });
-            });
-
-            peer.on('call', (call) => {
-                call.answer(localStream);
-                call.on('stream', (remoteStream) => {
-                    playAudio(call.peer, remoteStream);
-                });
-            });
-        }
-
-        function playAudio(peerId, stream) {
-            log("🔊 AUDIO LIVE VERBUNDEN!");
-            let audio = document.getElementById("audio_" + peerId);
-            if (!audio) {
-                audio = document.createElement("audio");
-                audio.id = "audio_" + peerId;
-                audio.autoplay = true;
-                audio.setAttribute("playsinline", "true");
-                document.getElementById("audioContainer").appendChild(audio);
-            }
-            audio.srcObject = stream;
-            audio.play().catch(e => log("Klicke 1x ins Bild für Ton."));
-        }
-
-        function log(msg) {
-            const l = document.getElementById("log");
-            l.innerHTML += `<div>> ${msg}</div>`;
-            l.scrollTop = l.scrollHeight;
-        }
+        window.addEventListener('load', () => {
+            statusDot.classList.add('online');
+            getUserLocation();
+        });
     </script>
 </body>
 </html>
