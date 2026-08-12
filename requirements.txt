@@ -1,4 +1,2 @@
-Flask
-flask-cors
-flask-socketio
-gunicorn
+fastapi
+uvicorn
