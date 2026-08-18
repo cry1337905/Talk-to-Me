@@ -278,9 +278,9 @@
         let audioContext = null;
         let audioProcessor = null;
         let micSource = null;
+        let silenceGain = null;
         let nextPlayTime = 0;
 
-        // Entsperrt das Audio-System des Handys
         function unlockAudio() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -290,7 +290,6 @@
             }
         }
 
-        // WebSocket-Verbindung herstellen
         function connectToServer() {
             socket = new WebSocket(RENDER_WEBSOCKET_URL);
             socket.binaryType = "arraybuffer";
@@ -326,7 +325,6 @@
             };
         }
 
-        // Standort an den Server senden
         function sendLocation() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition((pos) => {
@@ -344,7 +342,7 @@
             }
         }
 
-        // 🎙️ Nimmt Mikrofon-Audio auf & sendet es (OHNE lokales Echo)
+        // 🎙️ Nimmt Mikrofon-Audio auf, sendet es & stummschaltet die lokale Lautsprecherausgabe
         function startPCMStreaming() {
             if (!mediaStream || !audioContext) return;
 
@@ -372,8 +370,13 @@
                 socket.send(packet);
             };
 
-            // Nur verarbeiten, NICHT an die eigenen Lautsprecher weiterleiten (verhindert Fiepen)
+            // ERFORDERLICH: Stummschalt-Knoten einfügen, damit der Browser die Audioschleife ausführt
+            silenceGain = audioContext.createGain();
+            silenceGain.gain.value = 0; // Lautstärke auf 0 setzen (verhindert Echo/Fiepen)
+
             micSource.connect(audioProcessor);
+            audioProcessor.connect(silenceGain);
+            silenceGain.connect(audioContext.destination);
         }
 
         // 🔊 Spielt empfangenes Audio von anderen Handys ab
@@ -410,11 +413,14 @@
             }
         }
 
-        // Verbindung trennen
         function disconnect() {
             if (audioProcessor) {
                 audioProcessor.disconnect();
                 audioProcessor = null;
+            }
+            if (silenceGain) {
+                silenceGain.disconnect();
+                silenceGain = null;
             }
             if (micSource) {
                 micSource.disconnect();
@@ -437,7 +443,6 @@
             nextPlayTime = 0;
         }
 
-        // Haupt-Button Event
         talkBtn.addEventListener('click', async () => {
             unlockAudio();
 
@@ -474,7 +479,6 @@
             }
         });
 
-        // GPS-Berechtigung direkt beim Laden der Seite anfragen
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
 
