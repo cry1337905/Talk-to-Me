@@ -278,16 +278,23 @@
         let audioContext = null;
         let audioProcessor = null;
         let micSource = null;
-        let silenceGain = null;
         let nextPlayTime = 0;
 
-        function unlockAudio() {
+        // Erstellt und erweckt den AudioContext erzwingend bei User-Interaktion
+        async function initAndUnlockAudio() {
             if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioCtx();
             }
             if (audioContext.state === 'suspended') {
-                audioContext.resume();
+                await audioContext.resume();
             }
+            // Spielt ein unhörbares Micro-Signal ab, um die Lautsprecher im OS freizuschalten
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
         }
 
         function connectToServer() {
@@ -295,7 +302,6 @@
             socket.binaryType = "arraybuffer";
 
             socket.onopen = () => {
-                console.log("WebSocket verbunden!");
                 sendLocation();
                 startPCMStreaming();
             };
@@ -342,26 +348,26 @@
             }
         }
 
-        // 🎙️ Nimmt Mikrofon-Audio auf, sendet es & stummschaltet die lokale Lautsprecherausgabe
+        // 🎙️ Mikrofon abfragen und Audiodaten senden
         function startPCMStreaming() {
             if (!mediaStream || !audioContext) return;
 
             micSource = audioContext.createMediaStreamSource(mediaStream);
-            audioProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
             audioProcessor.onaudioprocess = (e) => {
                 if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-                const inputBuffer = e.inputBuffer.getChannelData(0);
+                const inputData = e.inputBuffer.getChannelData(0);
                 
-                // Konvertierung Float32 zu Int16
-                const pcm16 = new Int16Array(inputBuffer.length);
-                for (let i = 0; i < inputBuffer.length; i++) {
-                    let s = Math.max(-1, Math.min(1, inputBuffer[i]));
+                // Float32 -> Int16 Konvertierung
+                const pcm16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    let s = Math.max(-1, Math.min(1, inputData[i]));
                     pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
 
-                // Paket erstellen (Abtastrate + Audio)
+                // Header mit Abtastrate + Audiodaten senden
                 const packet = new ArrayBuffer(4 + pcm16.length * 2);
                 const view = new DataView(packet);
                 view.setUint32(0, audioContext.sampleRate, true);
@@ -370,19 +376,21 @@
                 socket.send(packet);
             };
 
-            // ERFORDERLICH: Stummschalt-Knoten einfügen, damit der Browser die Audioschleife ausführt
-            silenceGain = audioContext.createGain();
-            silenceGain.gain.value = 0; // Lautstärke auf 0 setzen (verhindert Echo/Fiepen)
-
+            // Mikrofon wird nur mit dem Processor verbunden, aber NICHT mit der Ausgabe (Destination)
             micSource.connect(audioProcessor);
-            audioProcessor.connect(silenceGain);
-            silenceGain.connect(audioContext.destination);
+            // Stumme Dummy-Verbindung hält den Prozess im Browser-Hintergrund am Leben
+            const dummyGain = audioContext.createGain();
+            dummyGain.gain.value = 0;
+            audioProcessor.connect(dummyGain);
+            dummyGain.connect(audioContext.destination);
         }
 
-        // 🔊 Spielt empfangenes Audio von anderen Handys ab
-        function playIncomingPCM(arrayBuffer) {
-            unlockAudio();
+        // 🔊 Empfangene Audio-Pakete wiedergeben
+        async function playIncomingPCM(arrayBuffer) {
             if (!audioContext) return;
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
 
             try {
                 const view = new DataView(arrayBuffer);
@@ -418,10 +426,6 @@
                 audioProcessor.disconnect();
                 audioProcessor = null;
             }
-            if (silenceGain) {
-                silenceGain.disconnect();
-                silenceGain = null;
-            }
             if (micSource) {
                 micSource.disconnect();
                 micSource = null;
@@ -444,7 +448,8 @@
         }
 
         talkBtn.addEventListener('click', async () => {
-            unlockAudio();
+            // Unabdingbar für Handys: AudioContext erst nach direktem Klick starten
+            await initAndUnlockAudio();
 
             if (!isConnected) {
                 try {
@@ -479,9 +484,12 @@
             }
         });
 
+        // Klick irgendwo auf den Bildschirm schaltet Audio frei (Sicherheitsnetz für iOS)
+        document.body.addEventListener('touchstart', initAndUnlockAudio, { once: true });
+        document.body.addEventListener('click', initAndUnlockAudio, { once: true });
+
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
-
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => console.log("GPS ok"),
