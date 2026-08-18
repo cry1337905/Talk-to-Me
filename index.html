@@ -280,7 +280,7 @@
         let micSource = null;
         let nextPlayTime = 0;
 
-        // Hilfsfunktion: Schaltet Handylautsprecher frei
+        // Entsperrt das Audio-System des Handys
         function unlockAudio() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -290,7 +290,7 @@
             }
         }
 
-        // WebSocket-Verbindung
+        // WebSocket-Verbindung herstellen
         function connectToServer() {
             socket = new WebSocket(RENDER_WEBSOCKET_URL);
             socket.binaryType = "arraybuffer";
@@ -326,7 +326,7 @@
             };
         }
 
-        // Standort senden
+        // Standort an den Server senden
         function sendLocation() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition((pos) => {
@@ -344,12 +344,11 @@
             }
         }
 
-        // 🎙️ Nimmt rohes Audio (PCM) vom Mikrofon auf und sendet es
+        // 🎙️ Nimmt Mikrofon-Audio auf & sendet es (OHNE lokales Echo)
         function startPCMStreaming() {
             if (!mediaStream || !audioContext) return;
 
             micSource = audioContext.createMediaStreamSource(mediaStream);
-            // Buffer von 2048 ergibt kleine, flüssige Pakete
             audioProcessor = audioContext.createScriptProcessor(2048, 1, 1);
 
             audioProcessor.onaudioprocess = (e) => {
@@ -357,14 +356,14 @@
 
                 const inputBuffer = e.inputBuffer.getChannelData(0);
                 
-                // Konvertierung von Float32 zu Int16 (spart Bandbreite)
+                // Konvertierung Float32 zu Int16
                 const pcm16 = new Int16Array(inputBuffer.length);
                 for (let i = 0; i < inputBuffer.length; i++) {
                     let s = Math.max(-1, Math.min(1, inputBuffer[i]));
                     pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
 
-                // Paket zusammenbauen: Erster 4-Byte-Block = Abtastrate (z. B. 48000Hz)
+                // Paket erstellen (Abtastrate + Audio)
                 const packet = new ArrayBuffer(4 + pcm16.length * 2);
                 const view = new DataView(packet);
                 view.setUint32(0, audioContext.sampleRate, true);
@@ -373,11 +372,11 @@
                 socket.send(packet);
             };
 
+            // Nur verarbeiten, NICHT an die eigenen Lautsprecher weiterleiten (verhindert Fiepen)
             micSource.connect(audioProcessor);
-            audioProcessor.connect(audioContext.destination);
         }
 
-        // 🔊 Spielt empfangenes Raw-PCM-Audio nahtlos ab
+        // 🔊 Spielt empfangenes Audio von anderen Handys ab
         function playIncomingPCM(arrayBuffer) {
             unlockAudio();
             if (!audioContext) return;
@@ -387,7 +386,6 @@
                 const remoteSampleRate = view.getUint32(0, true);
                 const int16 = new Int16Array(arrayBuffer, 4);
 
-                // Zurück zu Float32 konvertieren
                 const float32 = new Float32Array(int16.length);
                 for (let i = 0; i < int16.length; i++) {
                     float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
@@ -400,7 +398,6 @@
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
 
-                // Reibungslose Aneinanderreihung der Audiohappen ohne Knacken
                 const currentTime = audioContext.currentTime;
                 if (nextPlayTime < currentTime) {
                     nextPlayTime = currentTime;
@@ -413,7 +410,7 @@
             }
         }
 
-        // Trennen
+        // Verbindung trennen
         function disconnect() {
             if (audioProcessor) {
                 audioProcessor.disconnect();
@@ -440,7 +437,7 @@
             nextPlayTime = 0;
         }
 
-        // Button Click
+        // Haupt-Button Event
         talkBtn.addEventListener('click', async () => {
             unlockAudio();
 
@@ -477,7 +474,7 @@
             }
         });
 
-        // Standort beim Laden anfordern
+        // GPS-Berechtigung direkt beim Laden der Seite anfragen
         window.addEventListener('load', () => {
             statusDot.classList.add('online');
 
