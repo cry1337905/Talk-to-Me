@@ -1,18 +1,9 @@
 import math
 import json
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
@@ -47,7 +38,6 @@ class ConnectionManager:
             "username": "Anonym"
         }
         self.active_connections.append(conn_info)
-        await self.broadcast_radar()
         return conn_info
 
     def disconnect(self, conn_info: dict):
@@ -113,17 +103,31 @@ async def radar_loop():
         await asyncio.sleep(1)
         await manager.broadcast_radar()
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(radar_loop())
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Garantiert den Start der Hintergrundschleife auf Render
+    task = asyncio.create_task(radar_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     conn_info = await manager.connect(websocket)
+    await manager.broadcast_radar()
     try:
         while True:
             message = await websocket.receive()
-            if "text" in message:
+            if "text" in message and message["text"]:
                 try:
                     data = json.loads(message["text"])
                     if data.get("type") == "location":
@@ -133,11 +137,10 @@ async def websocket_endpoint(websocket: WebSocket):
                             data["lng"], 
                             data.get("username", "Anonym")
                         )
-                        # Nach Update direkt ein Radar-Signal erzwingen
                         await manager.broadcast_radar()
                 except Exception:
                     pass
-            elif "bytes" in message:
+            elif "bytes" in message and message["bytes"]:
                 await manager.broadcast_audio(conn_info, message["bytes"])
     except WebSocketDisconnect:
         manager.disconnect(conn_info)
