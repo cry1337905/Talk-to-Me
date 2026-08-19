@@ -329,6 +329,10 @@
         let currentLat = 52.5200;
         let currentLng = 13.4050;
 
+        // Kompass-Variable & Speicher für letzte Nutzer
+        let currentHeading = 0;
+        let lastUserList = [];
+
         const nameModal = document.getElementById('nameModal');
         const usernameInput = document.getElementById('usernameInput');
         const startAppBtn = document.getElementById('startAppBtn');
@@ -350,8 +354,47 @@
                 myUsername = name;
                 nameModal.style.display = 'none';
                 log("Name gesetzt: " + myUsername);
+                
+                // Kompass-Sensoren bei Interaktion starten
+                startCompass();
             }
         });
+
+        // --- KOMPASS-FUNKTIONEN ---
+        function startCompass() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS 13+ Berechtigungsanfrage
+                DeviceOrientationEvent.requestPermission().then(response => {
+                    if (response === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                    }
+                }).catch(console.error);
+            } else {
+                // Android & ältere Browser
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+        }
+
+        function handleOrientation(event) {
+            let heading = null;
+
+            if (event.webkitCompassHeading) {
+                // iOS
+                heading = event.webkitCompassHeading;
+            } else if (event.alpha !== null) {
+                // Android / Standard
+                heading = 360 - event.alpha;
+            }
+
+            if (heading !== null) {
+                currentHeading = heading;
+                // Sobald sich das Handy dreht, Radar neu ausrichten
+                if (lastUserList.length > 0) {
+                    updateRadarUI(lastUserList);
+                }
+            }
+        }
 
         async function initAndUnlockAudio() {
             if (!audioContext) {
@@ -392,7 +435,6 @@
 
                 socket.onmessage = (event) => {
                     if (typeof event.data === "string") {
-                        log("EMPFANGEN: " + event.data);
                         try {
                             const data = JSON.parse(event.data);
 
@@ -462,8 +504,8 @@
 
         function updateRadarUI(users) {
             if (!Array.isArray(users)) users = [];
+            lastUserList = users; // Speichern für Kompass-Update
 
-            // Filtere ggf. sich selbst heraus, falls der Server das nicht tut
             const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
 
             nearbyCount.textContent = String(otherUsers.length);
@@ -478,6 +520,9 @@
             const radarRadius = 130;
             const maxDistance = 500;
 
+            // Wandle Kompasswinkel in Bogenmaß um
+            const headingRad = (currentHeading * Math.PI) / 180;
+
             otherUsers.forEach((user, index) => {
                 const username = user.username || user.name || user.id || "User";
                 const distance = Math.round(user.distance ?? user.dist ?? 0);
@@ -486,6 +531,24 @@
                 item.className = 'user-item';
                 item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
                 userContainer.appendChild(item);
+
+                // Server-Koordinaten (Nord/Ost ausgerichtet)
+                let rawX = user.x ?? user.rel_x ?? 0;
+                let rawY = user.y ?? user.rel_y ?? 0;
+
+                // --- KOMPASS-DREHUNG DER BLIPS ---
+                let rotatedX = rawX * Math.cos(headingRad) - rawY * Math.sin(headingRad);
+                let rotatedY = rawX * Math.sin(headingRad) + rawY * Math.cos(headingRad);
+
+                let pxX = (rotatedX / maxDistance) * radarRadius;
+                let pxY = (rotatedY / maxDistance) * radarRadius;
+
+                // Versatz für sehr nahe Blips, damit sie sich nicht verdecken
+                if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
+                    const angle = ((index + 1) * 72) * (Math.PI / 180);
+                    pxX = Math.cos(angle) * 35;
+                    pxY = Math.sin(angle) * 35;
+                }
 
                 const container = document.createElement('div');
                 container.className = 'radar-blip-container';
@@ -499,19 +562,6 @@
 
                 container.appendChild(blip);
                 container.appendChild(label);
-
-                let xVal = user.x ?? user.rel_x ?? 0;
-                let yVal = user.y ?? user.rel_y ?? 0;
-
-                let pxX = (xVal / maxDistance) * radarRadius;
-                let pxY = (yVal / maxDistance) * radarRadius;
-
-                // Versatz für nahe beieinander stehende Punkte
-                if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
-                    const angle = ((index + 1) * 72) * (Math.PI / 180);
-                    pxX = Math.cos(angle) * 50;
-                    pxY = Math.sin(angle) * 50;
-                }
 
                 container.style.left = `${130 + pxX}px`;
                 container.style.top = `${130 - pxY}px`;
