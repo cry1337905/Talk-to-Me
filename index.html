@@ -106,14 +106,15 @@
 
         .stats-bar {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             justify-content: center;
             margin-top: 8px;
+            flex-wrap: wrap;
         }
 
         .stat-badge {
             background: var(--card-bg);
-            padding: 4px 12px;
+            padding: 4px 10px;
             border-radius: 12px;
             font-size: 0.75rem;
             color: var(--text-secondary);
@@ -280,8 +281,9 @@
     <header>
         <h1>TALK TO ME</h1>
         <div class="stats-bar">
-            <div class="stat-badge">Server: <span id="totalOnlineCount">0</span> Online</div>
-            <div class="stat-badge">Umkreis (500m): <span id="nearbyCount">0</span></div>
+            <div class="stat-badge">Online: <span id="totalOnlineCount">0</span></div>
+            <div class="stat-badge">Umkreis: <span id="nearbyCount">0</span></div>
+            <div class="stat-badge">Kompass: <span id="compassHeadingVal">Inaktiv</span></div>
         </div>
         <div class="gps-status" id="gpsStatus">GPS Status: Bereit...</div>
     </header>
@@ -312,7 +314,6 @@
     <script>
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
-        // Generiere eine eindeutige ID pro Gerät
         let myClientId = "user_" + Math.random().toString(36).substring(2, 9);
         let myUsername = "Anonym_" + Math.floor(Math.random() * 899 + 100);
 
@@ -329,7 +330,6 @@
         let currentLat = 52.5200;
         let currentLng = 13.4050;
 
-        // Kompass-Variable & Speicher für letzte Nutzer
         let currentHeading = 0;
         let lastUserList = [];
 
@@ -343,34 +343,39 @@
         const userContainer = document.getElementById('userContainer');
         const radarBox = document.getElementById('radarBox');
         const gpsStatus = document.getElementById('gpsStatus');
+        const compassHeadingVal = document.getElementById('compassHeadingVal');
 
         function log(msg) {
             console.log(msg);
         }
 
-        startAppBtn.addEventListener('click', () => {
+        startAppBtn.addEventListener('click', async () => {
             const name = usernameInput.value.trim();
             if (name.length > 0) {
                 myUsername = name;
                 nameModal.style.display = 'none';
                 log("Name gesetzt: " + myUsername);
                 
-                // Kompass-Sensoren bei Interaktion starten
-                startCompass();
+                // Sensor-Berechtigungen anfordern
+                await requestCompassPermission();
             }
         });
 
-        // --- KOMPASS-FUNKTIONEN ---
-        function startCompass() {
+        // --- KOMPASS FREIGABE & AUSLESEN ---
+        async function requestCompassPermission() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // iOS 13+ Berechtigungsanfrage
-                DeviceOrientationEvent.requestPermission().then(response => {
-                    if (response === 'granted') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
                         window.addEventListener('deviceorientation', handleOrientation, true);
+                    } else {
+                        compassHeadingVal.textContent = "Gesperrt";
                     }
-                }).catch(console.error);
+                } catch (e) {
+                    console.error("iOS Kompass-Fehler:", e);
+                }
             } else {
-                // Android & ältere Browser
+                // Android & Standard Web
                 window.addEventListener('deviceorientationabsolute', handleOrientation, true);
                 window.addEventListener('deviceorientation', handleOrientation, true);
             }
@@ -380,16 +385,18 @@
             let heading = null;
 
             if (event.webkitCompassHeading) {
-                // iOS
+                // iOS Safari
                 heading = event.webkitCompassHeading;
             } else if (event.alpha !== null) {
-                // Android / Standard
+                // Android / Chrome
                 heading = 360 - event.alpha;
             }
 
             if (heading !== null) {
-                currentHeading = heading;
-                // Sobald sich das Handy dreht, Radar neu ausrichten
+                currentHeading = (heading + 360) % 360;
+                compassHeadingVal.textContent = Math.round(currentHeading) + "°";
+
+                // Sofort neu zeichnen bei Drehung
                 if (lastUserList.length > 0) {
                     updateRadarUI(lastUserList);
                 }
@@ -504,7 +511,7 @@
 
         function updateRadarUI(users) {
             if (!Array.isArray(users)) users = [];
-            lastUserList = users; // Speichern für Kompass-Update
+            lastUserList = users;
 
             const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
 
@@ -520,8 +527,8 @@
             const radarRadius = 130;
             const maxDistance = 500;
 
-            // Wandle Kompasswinkel in Bogenmaß um
-            const headingRad = (currentHeading * Math.PI) / 180;
+            // Umrechnung des Kompass-Winkels in Radiant
+            const rad = (currentHeading * Math.PI) / 180;
 
             otherUsers.forEach((user, index) => {
                 const username = user.username || user.name || user.id || "User";
@@ -532,22 +539,23 @@
                 item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
                 userContainer.appendChild(item);
 
-                // Server-Koordinaten (Nord/Ost ausgerichtet)
-                let rawX = user.x ?? user.rel_x ?? 0;
-                let rawY = user.y ?? user.rel_y ?? 0;
+                // Relativer Abstand in Metern (vom Server)
+                let relX = user.x ?? user.rel_x ?? 0;
+                let relY = user.y ?? user.rel_y ?? 0;
 
-                // --- KOMPASS-DREHUNG DER BLIPS ---
-                let rotatedX = rawX * Math.cos(headingRad) - rawY * Math.sin(headingRad);
-                let rotatedY = rawX * Math.sin(headingRad) + rawY * Math.cos(headingRad);
+                // ROTATION BERECHNEN:
+                // Da Y auf dem Bildschirm nach unten verläuft, wird -relY genutzt
+                let rotatedX = relX * Math.cos(rad) - (-relY) * Math.sin(rad);
+                let rotatedY = relX * Math.sin(rad) + (-relY) * Math.cos(rad);
 
                 let pxX = (rotatedX / maxDistance) * radarRadius;
-                let pxY = (rotatedY / maxDistance) * radarRadius;
+                let pxY = -(rotatedY / maxDistance) * radarRadius; // Y auf Bildschirm spiegeln
 
-                // Versatz für sehr nahe Blips, damit sie sich nicht verdecken
+                // Überlappungs-Versatz für extrem nahe Punkte
                 if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
                     const angle = ((index + 1) * 72) * (Math.PI / 180);
-                    pxX = Math.cos(angle) * 35;
-                    pxY = Math.sin(angle) * 35;
+                    pxX = Math.cos(angle) * 30;
+                    pxY = Math.sin(angle) * 30;
                 }
 
                 const container = document.createElement('div');
@@ -563,8 +571,9 @@
                 container.appendChild(blip);
                 container.appendChild(label);
 
+                // 130px entspricht dem Radar-Mittelpunkt
                 container.style.left = `${130 + pxX}px`;
-                container.style.top = `${130 - pxY}px`;
+                container.style.top = `${130 + pxY}px`;
 
                 radarBox.appendChild(container);
             });
