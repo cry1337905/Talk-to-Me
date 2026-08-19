@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Talk to Me</title>
+    <title>Talk to Me - Radar</title>
     <style>
         :root {
             --bg-color: #0b0f17;
@@ -29,51 +29,101 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             align-items: center;
-            padding: 24px 16px;
-            overflow: hidden;
+            padding: 16px;
+            overflow-x: hidden;
+        }
+
+        /* Modal für Namensabfrage */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(11, 15, 23, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 24px;
+            width: 100%;
+            max-width: 340px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .modal-card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .modal-card p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .modal-card input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            margin-bottom: 16px;
+            text-align: center;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .modal-card button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            background: var(--accent-cyan);
+            color: #000;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
         }
 
         header {
             width: 100%;
             max-width: 400px;
             text-align: center;
-            margin-top: 10px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
+            margin-bottom: 12px;
         }
 
         h1 {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 700;
-            letter-spacing: 1px;
             background: linear-gradient(135deg, #fff 30%, var(--accent-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .info-bar {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            width: 100%;
-        }
-
-        .status-container, .radar-container {
+        .status-container {
             display: inline-flex;
             align-items: center;
             gap: 8px;
             background: var(--card-bg);
             padding: 6px 14px;
             border-radius: 20px;
+            margin-top: 6px;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
         }
 
         .status-dot {
@@ -81,206 +131,213 @@
             height: 8px;
             border-radius: 50%;
             background-color: var(--text-secondary);
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .status-dot.online {
-            background-color: var(--status-green);
-            box-shadow: 0 0 8px var(--status-green);
         }
 
         .status-dot.active {
             background-color: var(--active-red);
             box-shadow: 0 0 10px var(--active-red);
-            animation: blink 1s infinite alternate;
         }
 
-        .radar-icon {
-            width: 14px;
-            height: 14px;
-            fill: var(--accent-cyan);
-        }
-
-        .status-text, .radar-text {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .radar-count {
-            color: var(--accent-cyan);
-            font-weight: 700;
-        }
-
-        main {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            flex: 1;
-        }
-
-        .talk-btn-wrapper {
+        /* 📡 RADAR VISUALISIERUNG */
+        .radar-box {
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .pulse-ring {
-            position: absolute;
-            width: 180px;
-            height: 180px;
+            width: 240px;
+            height: 240px;
             border-radius: 50%;
-            border: 2px solid var(--accent-cyan);
-            opacity: 0;
-            pointer-events: none;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.05) 0%, rgba(11, 15, 23, 0.8) 100%);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            margin: 10px 0;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
         }
 
-        .talk-btn-wrapper.active .pulse-ring {
-            border-color: var(--active-red);
-            animation: pulse-wave 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        .radar-ring {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 1px dashed rgba(6, 182, 212, 0.2);
+        }
+        .radar-ring.r1 { width: 33%; height: 33%; }
+        .radar-ring.r2 { width: 66%; height: 66%; }
+        .radar-ring.r3 { width: 100%; height: 100%; }
+
+        .radar-sweep {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.4) 0deg, transparent 60deg);
+            animation: sweep 4s linear infinite;
         }
 
-        .talk-btn-wrapper.active .pulse-ring:nth-child(2) {
-            animation-delay: 0.6s;
+        @keyframes sweep {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
+        .radar-center-dot {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 8px; height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 8px #fff;
+            z-index: 5;
+        }
+
+        /* User Blips auf dem Radar */
+        .radar-blip {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-cyan);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px var(--accent-cyan);
+            z-index: 4;
+            transition: all 0.5s ease;
+        }
+
+        /* User Liste */
+        .users-list {
+            width: 100%;
+            max-width: 320px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .users-list h3 {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .user-item:last-child { border-bottom: none; }
+        .user-name { font-weight: 600; color: var(--text-primary); }
+        .user-dist { color: var(--accent-cyan); }
+
+        /* PTT Button */
         .talk-btn {
-            width: 160px;
-            height: 160px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
             border: none;
-            outline: none;
             background: linear-gradient(145deg, #131b2e, #0b101d);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5),
-                        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
             color: var(--text-primary);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             cursor: pointer;
-            position: relative;
             z-index: 2;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.3s ease;
             -webkit-tap-highlight-color: transparent;
         }
 
-        .talk-btn svg {
-            width: 48px;
-            height: 48px;
-            fill: var(--text-secondary);
-            transition: fill 0.3s ease, transform 0.3s ease;
-        }
+        .talk-btn svg { width: 36px; height: 36px; fill: var(--text-secondary); }
+        .talk-btn span { font-size: 0.75rem; margin-top: 6px; font-weight: 700; color: var(--text-secondary); }
 
-        .talk-btn span {
-            margin-top: 10px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-        }
-
-        .talk-btn:active {
-            transform: scale(0.95);
-        }
-
-        .talk-btn-wrapper.active .talk-btn {
+        .talk-btn.active {
             background: linear-gradient(145deg, #1f1015, #2b090a);
-            box-shadow: 0 0 30px var(--active-glow),
-                        inset 0 0 15px var(--active-glow);
+            box-shadow: 0 0 25px var(--active-glow);
         }
-
-        .talk-btn-wrapper.active .talk-btn svg {
-            fill: var(--active-red);
-            transform: scale(1.1);
-        }
-
-        .talk-btn-wrapper.active .talk-btn span {
-            color: var(--active-red);
-        }
-
-        footer {
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        footer p {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            opacity: 0.6;
-        }
-
-        @keyframes pulse-wave {
-            0% { transform: scale(0.95); opacity: 0.8; }
-            100% { transform: scale(1.8); opacity: 0; }
-        }
-
-        @keyframes blink {
-            from { opacity: 1; }
-            to { opacity: 0.3; }
-        }
+        .talk-btn.active svg, .talk-btn.active span { fill: var(--active-red); color: var(--active-red); }
     </style>
 </head>
 <body>
 
+    <!-- Namens-Dialog -->
+    <div class="modal-overlay" id="nameModal">
+        <div class="modal-card">
+            <h2>Willkommen!</h2>
+            <p>Gib deinen Namen ein, um für Personen in 500m Umkreis auf dem Radar zu erscheinen.</p>
+            <input type="text" id="usernameInput" placeholder="Dein Name..." maxlength="15">
+            <button id="startAppBtn">STARTEN</button>
+        </div>
+    </div>
+
     <header>
         <h1>TALK TO ME</h1>
-        
-        <div class="info-bar">
-            <div class="status-container">
-                <div class="status-dot" id="statusDot"></div>
-                <span class="status-text" id="statusText">Bereit</span>
-            </div>
-
-            <div class="radar-container">
-                <svg class="radar-icon" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
-                </svg>
-                <span class="radar-text"><span class="radar-count" id="nearbyCount">0</span> in 500m</span>
-            </div>
+        <div class="status-container">
+            <div class="status-dot" id="statusDot"></div>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);" id="statusText">Bereit</span>
         </div>
     </header>
 
-    <main>
-        <div class="talk-btn-wrapper" id="btnWrapper">
-            <div class="pulse-ring"></div>
-            <div class="pulse-ring"></div>
-            <button class="talk-btn" id="talkBtn">
-                <svg viewBox="0 0 24 24">
-                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                </svg>
-                <span id="btnLabel">VERBINDEN</span>
-            </button>
-        </div>
-    </main>
+    <!-- Radar Schirm -->
+    <div class="radar-box" id="radarBox">
+        <div class="radar-ring r1"></div>
+        <div class="radar-ring r2"></div>
+        <div class="radar-ring r3"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-center-dot"></div>
+    </div>
 
-    <footer>
-        <p>Echtzeit Cloud Audio-Funkverbindung</p>
-    </footer>
+    <!-- Live Umkreis User Liste -->
+    <div class="users-list">
+        <h3>In deiner Nähe (<span id="userCount">0</span>)</h3>
+        <div id="userContainer">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Scanne Umkreis...</div>
+        </div>
+    </div>
+
+    <!-- Funk Button -->
+    <button class="talk-btn" id="talkBtn">
+        <svg viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+        <span id="btnLabel">VERBINDEN</span>
+    </button>
 
     <script>
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
-        const talkBtn = document.getElementById('talkBtn');
-        const btnWrapper = document.getElementById('btnWrapper');
-        const btnLabel = document.getElementById('btnLabel');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const nearbyCount = document.getElementById('nearbyCount');
-
+        let myUsername = "Anonym";
         let isConnected = false;
-        let mediaStream = null;
         let socket = null;
         let audioContext = null;
         let audioProcessor = null;
+        let mediaStream = null;
         let micSource = null;
         let nextPlayTime = 0;
 
-        // Erstellt und erweckt den AudioContext erzwingend bei User-Interaktion
+        const nameModal = document.getElementById('nameModal');
+        const usernameInput = document.getElementById('usernameInput');
+        const startAppBtn = document.getElementById('startAppBtn');
+        const talkBtn = document.getElementById('talkBtn');
+        const btnLabel = document.getElementById('btnLabel');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const userContainer = document.getElementById('userContainer');
+        const userCount = document.getElementById('userCount');
+        const radarBox = document.getElementById('radarBox');
+
+        startAppBtn.addEventListener('click', () => {
+            const name = usernameInput.value.trim();
+            if (name.length > 0) {
+                myUsername = name;
+                nameModal.style.display = 'none';
+            }
+        });
+
         async function initAndUnlockAudio() {
             if (!audioContext) {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -289,7 +346,6 @@
             if (audioContext.state === 'suspended') {
                 await audioContext.resume();
             }
-            // Spielt ein unhörbares Micro-Signal ab, um die Lautsprecher im OS freizuschalten
             const buffer = audioContext.createBuffer(1, 1, 22050);
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
@@ -310,8 +366,8 @@
                 if (typeof event.data === "string") {
                     try {
                         const data = JSON.parse(event.data);
-                        if (data.type === 'nearby_count') {
-                            nearbyCount.textContent = data.count;
+                        if (data.type === 'radar_update') {
+                            updateRadarUI(data.nearby_users);
                         }
                     } catch (e) {
                         console.error("JSON Fehler:", e);
@@ -321,76 +377,95 @@
                 }
             };
 
-            socket.onerror = (err) => {
-                console.error("WebSocket Fehler:", err);
-                statusText.textContent = "Server-Fehler";
-            };
-
-            socket.onclose = () => {
-                if (isConnected) disconnect();
-            };
+            socket.onerror = () => { statusText.textContent = "Fehler"; };
+            socket.onclose = () => { if (isConnected) disconnect(); };
         }
 
         function sendLocation() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition((pos) => {
-                    const gpsData = {
+                    const payload = {
                         type: 'location',
                         lat: pos.coords.latitude,
-                        lng: pos.coords.longitude
+                        lng: pos.coords.longitude,
+                        username: myUsername
                     };
                     if (socket && socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify(gpsData));
+                        socket.send(JSON.stringify(payload));
                     }
-                }, (err) => {
-                    console.warn("GPS nicht verfügbar:", err);
-                }, { enableHighAccuracy: true });
+                }, null, { enableHighAccuracy: true });
             }
         }
 
-        // 🎙️ Mikrofon abfragen und Audiodaten senden
+        // 📡 Aktualisiert Radar-Punkte & Nutzerliste (500m Limit)
+        function updateRadarUI(users) {
+            userCount.textContent = users.length;
+            
+            // Alte Radar-Punkte entfernen
+            document.querySelectorAll('.radar-blip').forEach(el => el.remove());
+            userContainer.innerHTML = '';
+
+            if (users.length === 0) {
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine Personen in 500m</div>`;
+                return;
+            }
+
+            const radarRadius = 120; // 240px breites Radar (Radius = 120px)
+            const maxDistance = 500; // 500 Meter entspricht dem Rand
+
+            users.forEach(user => {
+                // 1. Eintrag in Liste
+                const item = document.createElement('div');
+                item.className = 'user-item';
+                item.innerHTML = `<span class="user-name">${user.username}</span><span class="user-dist">${user.distance}m</span>`;
+                userContainer.appendChild(item);
+
+                // 2. Punkt auf Radar platzieren
+                const blip = document.createElement('div');
+                blip.className = 'radar-blip';
+
+                // Umrechnung Meter -> Pixel auf Radarschirm
+                const pxX = (user.x / maxDistance) * radarRadius;
+                const pxY = (user.y / maxDistance) * radarRadius;
+
+                // Position setzen (Zentrum ist 120, 120)
+                blip.style.left = `${120 + pxX}px`;
+                blip.style.top = `${120 - pxY}px`; // Invertiert, da Y auf Schirm nach unten wächst
+
+                radarBox.appendChild(blip);
+            });
+        }
+
         function startPCMStreaming() {
             if (!mediaStream || !audioContext) return;
-
             micSource = audioContext.createMediaStreamSource(mediaStream);
             audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
             audioProcessor.onaudioprocess = (e) => {
                 if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
-
                 const inputData = e.inputBuffer.getChannelData(0);
-                
-                // Float32 -> Int16 Konvertierung
                 const pcm16 = new Int16Array(inputData.length);
                 for (let i = 0; i < inputData.length; i++) {
                     let s = Math.max(-1, Math.min(1, inputData[i]));
                     pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 }
-
-                // Header mit Abtastrate + Audiodaten senden
                 const packet = new ArrayBuffer(4 + pcm16.length * 2);
                 const view = new DataView(packet);
                 view.setUint32(0, audioContext.sampleRate, true);
                 new Int16Array(packet, 4).set(pcm16);
-
                 socket.send(packet);
             };
 
-            // Mikrofon wird nur mit dem Processor verbunden, aber NICHT mit der Ausgabe (Destination)
             micSource.connect(audioProcessor);
-            // Stumme Dummy-Verbindung hält den Prozess im Browser-Hintergrund am Leben
             const dummyGain = audioContext.createGain();
             dummyGain.gain.value = 0;
             audioProcessor.connect(dummyGain);
             dummyGain.connect(audioContext.destination);
         }
 
-        // 🔊 Empfangene Audio-Pakete wiedergeben
         async function playIncomingPCM(arrayBuffer) {
             if (!audioContext) return;
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
+            if (audioContext.state === 'suspended') await audioContext.resume();
 
             try {
                 const view = new DataView(arrayBuffer);
@@ -410,92 +485,57 @@
                 source.connect(audioContext.destination);
 
                 const currentTime = audioContext.currentTime;
-                if (nextPlayTime < currentTime) {
-                    nextPlayTime = currentTime;
-                }
+                if (nextPlayTime < currentTime) nextPlayTime = currentTime;
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration;
-
             } catch (e) {
-                console.error("Audio-Wiedergabefehler:", e);
+                console.error("Playback error:", e);
             }
         }
 
         function disconnect() {
-            if (audioProcessor) {
-                audioProcessor.disconnect();
-                audioProcessor = null;
-            }
-            if (micSource) {
-                micSource.disconnect();
-                micSource = null;
-            }
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-            if (socket) {
-                socket.close();
-            }
+            if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
+            if (micSource) { micSource.disconnect(); micSource = null; }
+            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+            if (socket) socket.close();
 
             isConnected = false;
-            btnWrapper.classList.remove('active');
-            statusDot.className = "status-dot online";
+            talkBtn.classList.remove('active');
+            statusDot.className = "status-dot";
             statusText.textContent = "Bereit";
             btnLabel.textContent = "VERBINDEN";
-            nearbyCount.textContent = "0";
-            nextPlayTime = 0;
+            userCount.textContent = "0";
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
+            document.querySelectorAll('.radar-blip').forEach(el => el.remove());
         }
 
         talkBtn.addEventListener('click', async () => {
-            // Unabdingbar für Handys: AudioContext erst nach direktem Klick starten
             await initAndUnlockAudio();
 
             if (!isConnected) {
                 try {
                     statusText.textContent = "Verbinde...";
-
                     mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { 
-                            echoCancellation: true, 
-                            noiseSuppression: true,
-                            autoGainControl: true
-                        }, 
+                        audio: { echoCancellation: true, noiseSuppression: true }, 
                         video: false 
                     });
 
                     connectToServer();
-
                     isConnected = true;
-                    btnWrapper.classList.add('active');
-                    statusDot.classList.remove('online');
-                    statusDot.classList.add('active');
+                    talkBtn.classList.add('active');
+                    statusDot.className = "status-dot active";
                     statusText.textContent = "LIVE";
                     btnLabel.textContent = "TRENNEN";
 
+                    // Regelmäßiges Standort-Update für Bewegungsszenarien
+                    setInterval(sendLocation, 5000);
+
                 } catch (err) {
-                    console.error("Zugriff verweigert:", err);
-                    alert("Bitte erlaube Zugriff auf Mikrofon und Standort.");
+                    alert("Mikrofon/GPS Zugriff erforderlich.");
                     statusText.textContent = "Fehler";
-                    statusDot.className = "status-dot";
                 }
             } else {
                 disconnect();
-            }
-        });
-
-        // Klick irgendwo auf den Bildschirm schaltet Audio frei (Sicherheitsnetz für iOS)
-        document.body.addEventListener('touchstart', initAndUnlockAudio, { once: true });
-        document.body.addEventListener('click', initAndUnlockAudio, { once: true });
-
-        window.addEventListener('load', () => {
-            statusDot.classList.add('online');
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => console.log("GPS ok"),
-                    (err) => console.warn("GPS Berechtigung fehlt"),
-                    { enableHighAccuracy: true }
-                );
             }
         });
     </script>
