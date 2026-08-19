@@ -42,8 +42,8 @@ class ConnectionManager:
         await websocket.accept()
         conn_info = {
             "ws": websocket,
-            "lat": None,
-            "lng": None,
+            "lat": 52.5200,  # Standard Fallback (Berlin)
+            "lng": 13.4050,
             "username": "Anonym"
         }
         self.active_connections.append(conn_info)
@@ -65,21 +65,19 @@ class ConnectionManager:
         for target in self.active_connections:
             nearby_users = []
             
-            # Falls dieses Handy selbst ein GPS Signal hat, Nahbereich berechnen
-            if target["lat"] is not None and target["lng"] is not None:
-                for other in self.active_connections:
-                    if other is target or other["lat"] is None or other["lng"] is None:
-                        continue
+            for other in self.active_connections:
+                if other is target:
+                    continue
 
-                    dist = haversine(target["lat"], target["lng"], other["lat"], other["lng"])
-                    if dist <= 500:
-                        rel_x, rel_y = get_relative_position(target["lat"], target["lng"], other["lat"], other["lng"])
-                        nearby_users.append({
-                            "username": other["username"],
-                            "distance": round(dist),
-                            "x": round(rel_x, 1),
-                            "y": round(rel_y, 1)
-                        })
+                dist = haversine(target["lat"], target["lng"], other["lat"], other["lng"])
+                if dist <= 500:
+                    rel_x, rel_y = get_relative_position(target["lat"], target["lng"], other["lat"], other["lng"])
+                    nearby_users.append({
+                        "username": other["username"],
+                        "distance": round(dist),
+                        "x": round(rel_x, 1),
+                        "y": round(rel_y, 1)
+                    })
 
             radar_data = {
                 "type": "radar_update",
@@ -93,11 +91,8 @@ class ConnectionManager:
                 pass
 
     async def broadcast_audio(self, sender_info: dict, data: bytes):
-        if sender_info["lat"] is None or sender_info["lng"] is None:
-            return
-
         for target in self.active_connections:
-            if target is sender_info or target["lat"] is None or target["lng"] is None:
+            if target is sender_info:
                 continue
 
             dist = haversine(sender_info["lat"], sender_info["lng"], target["lat"], target["lng"])

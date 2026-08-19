@@ -122,6 +122,12 @@
 
         .stat-badge span { color: var(--accent-cyan); font-weight: 700; }
 
+        .gps-status {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
         /* 📡 RADAR VISUALISIERUNG */
         .radar-box {
             position: relative;
@@ -191,7 +197,7 @@
         }
 
         .radar-blip-label {
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(0, 0, 0, 0.85);
             border: 1px solid var(--accent-cyan);
             color: #fff;
             font-size: 0.65rem;
@@ -267,7 +273,7 @@
     <div class="modal-overlay" id="nameModal">
         <div class="modal-card">
             <h2>Willkommen!</h2>
-            <p>Gib deinen Namen ein, um auf dem Radar der anderen Personen zu erscheinen.</p>
+            <p>Gib deinen Namen ein, um auf dem Radar zu erscheinen.</p>
             <input type="text" id="usernameInput" placeholder="Dein Name..." maxlength="15">
             <button id="startAppBtn">STARTEN</button>
         </div>
@@ -279,6 +285,7 @@
             <div class="stat-badge">Server: <span id="totalOnlineCount">0</span> Online</div>
             <div class="stat-badge">Umkreis (500m): <span id="nearbyCount">0</span></div>
         </div>
+        <div class="gps-status" id="gpsStatus">GPS Status: Prüfe...</div>
     </header>
 
     <div class="radar-box" id="radarBox">
@@ -326,6 +333,7 @@
         const nearbyCount = document.getElementById('nearbyCount');
         const userContainer = document.getElementById('userContainer');
         const radarBox = document.getElementById('radarBox');
+        const gpsStatus = document.getElementById('gpsStatus');
 
         startAppBtn.addEventListener('click', () => {
             const name = usernameInput.value.trim();
@@ -357,7 +365,6 @@
             socket.onopen = () => {
                 sendLocation();
                 startPCMStreaming();
-                // Standort alle 3 Sekunden aktualisieren
                 gpsInterval = setInterval(sendLocation, 3000);
             };
 
@@ -384,47 +391,57 @@
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        const payload = {
-                            type: 'location',
-                            lat: pos.coords.latitude,
-                            lng: pos.coords.longitude,
-                            username: myUsername
-                        };
-                        if (socket && socket.readyState === WebSocket.OPEN) {
-                            socket.send(JSON.stringify(payload));
-                        }
+                        gpsStatus.textContent = "GPS Status: Aktiv (Echtzeit)";
+                        gpsStatus.style.color = "#10b981";
+                        dispatchLocation(pos.coords.latitude, pos.coords.longitude);
                     },
                     (err) => {
-                        console.warn("GPS-Fehler:", err.message);
+                        gpsStatus.textContent = "GPS verweigert/Fehler! Nutze Simulations-Modus.";
+                        gpsStatus.style.color = "#ef4444";
+                        // Fallback: Simulierte Basis-Koordinaten nutzen
+                        dispatchLocation(52.5200, 13.4050);
                     },
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    { enableHighAccuracy: false, timeout: 4000, maximumAge: 10000 }
                 );
+            } else {
+                dispatchLocation(52.5200, 13.4050);
+            }
+        }
+
+        function dispatchLocation(lat, lng) {
+            const payload = {
+                type: 'location',
+                lat: lat,
+                lng: lng,
+                username: myUsername
+            };
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(payload));
             }
         }
 
         function updateRadarUI(users) {
             nearbyCount.textContent = users.length;
             
-            // Alte Blips entfernen
             document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
             userContainer.innerHTML = '';
 
             if (users.length === 0) {
-                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine Personen im 500m Umkreis</div>`;
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in 500m</div>`;
                 return;
             }
 
-            const radarRadius = 130; // Radius des Radar-Kreises (260px / 2)
-            const maxDistance = 500; // 500 Meter entspricht dem Außenrand
+            const radarRadius = 130;
+            const maxDistance = 500;
 
-            users.forEach(user => {
-                // 1. Eintrag in der Liste unter dem Radar
+            users.forEach((user, index) => {
+                // Eintrag in Liste
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `<span class="user-name">${user.username}</span><span class="user-dist">${user.distance}m</span>`;
                 userContainer.appendChild(item);
 
-                // 2. Punkt & Beschriftung direkt auf dem Radar zeichnen
+                // Punkt auf Radar
                 const container = document.createElement('div');
                 container.className = 'radar-blip-container';
 
@@ -438,14 +455,15 @@
                 container.appendChild(blip);
                 container.appendChild(label);
 
-                // Umrechnung Meter -> Radar PX
                 let pxX = (user.x / maxDistance) * radarRadius;
                 let pxY = (user.y / maxDistance) * radarRadius;
 
-                // Minimale Verschiebung bei 0m Distanz, damit der Punkt nicht exakt unter dem Mittelpunkt liegt
-                if (Math.abs(pxX) < 8 && Math.abs(pxY) < 8) {
-                    pxX = 12;
-                    pxY = 12;
+                // Falls 2 Geräte exakt die gleichen Koordinaten liefern (z.B. Test im selben Raum / Fallback),
+                // verschieben wir sie leicht virtuell, damit man sie nebeneinander auf dem Radar sieht!
+                if (Math.abs(pxX) < 10 && Math.abs(pxY) < 10) {
+                    const angle = (index * 60) * (Math.PI / 180);
+                    pxX = Math.cos(angle) * 45;
+                    pxY = Math.sin(angle) * 45;
                 }
 
                 container.style.left = `${130 + pxX}px`;
@@ -544,7 +562,7 @@
                     btnLabel.textContent = "TRENNEN";
 
                 } catch (err) {
-                    alert("Mikrofon/GPS Zugriff erforderlich.");
+                    alert("Mikrofon-Zugriff erforderlich.");
                 }
             } else {
                 disconnect();
