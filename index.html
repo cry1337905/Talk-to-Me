@@ -3,150 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Talk-to-Me | Radar Walkie-Talkie</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Talk to Me - Radar</title>
     <style>
         :root {
-            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #070a12 100%);
-            --card-bg: rgba(255, 255, 255, 0.03);
-            --card-border: rgba(255, 255, 255, 0.08);
+            --bg-color: #0b0f17;
+            --card-bg: rgba(22, 30, 46, 0.75);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
             --accent-cyan: #06b6d4;
-            --accent-glow: rgba(6, 182, 212, 0.4);
-            --danger-red: #f43f5e;
-            --success-green: #10b981;
-            --text-main: #f8fafc;
-            --text-sub: #64748b;
+            --active-red: #ef4444;
+            --active-glow: rgba(239, 68, 68, 0.5);
+            --status-green: #10b981;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         body {
-            background: var(--bg-gradient);
-            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+            overflow-x: hidden;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(11, 15, 23, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 100;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 16px;
+            padding: 20px;
         }
 
-        .app-container {
+        .modal-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 24px;
+            width: 100%;
+            max-width: 340px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .modal-card h2 { font-size: 1.3rem; margin-bottom: 8px; }
+        .modal-card p { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px; }
+
+        .modal-card input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            margin-bottom: 16px;
+            text-align: center;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .modal-card button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            background: var(--accent-cyan);
+            color: #000;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        header {
             width: 100%;
             max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .header {
             text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
+            margin-bottom: 8px;
         }
 
-        .header h1 {
-            font-size: 1.6rem;
+        h1 {
+            font-size: 1.4rem;
             font-weight: 700;
-            letter-spacing: -0.5px;
-            background: linear-gradient(90deg, #38bdf8, #06b6d4);
+            background: linear-gradient(135deg, #fff 30%, var(--accent-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--card-border);
-            color: var(--text-sub);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--text-sub);
-        }
-
-        .status-pill.connected {
-            color: #34d399;
-            border-color: rgba(52, 211, 153, 0.2);
-            background: rgba(16, 185, 129, 0.1);
-        }
-
-        .status-pill.connected .status-dot {
-            background-color: var(--success-green);
-            box-shadow: 0 0 8px var(--success-green);
-        }
-
-        /* Glassmorphism Card */
-        .glass-card {
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border);
-            border-radius: 24px;
-            padding: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-        }
-
-        /* Radar Styling */
-        .radar-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 1;
-            background: radial-gradient(circle, #0c1527 0%, #030712 100%);
-            border-radius: 50%;
-            border: 1px solid rgba(6, 182, 212, 0.2);
-            box-shadow: 0 0 30px rgba(6, 182, 212, 0.1), inset 0 0 15px rgba(0,0,0,0.8);
-            overflow: hidden;
+        .stats-bar {
             display: flex;
-            align-items: center;
+            gap: 12px;
             justify-content: center;
+            margin-top: 8px;
         }
 
-        .radar-grid {
-            position: absolute;
-            border: 1px dashed rgba(6, 182, 212, 0.15);
+        .stat-badge {
+            background: var(--card-bg);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .stat-badge span { color: var(--accent-cyan); font-weight: 700; }
+
+        .gps-status {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .radar-box {
+            position: relative;
+            width: 260px;
+            height: 260px;
             border-radius: 50%;
-            pointer-events: none;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.08) 0%, rgba(11, 15, 23, 0.9) 100%);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            margin: 12px 0;
+            overflow: hidden;
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.2);
         }
 
-        .radar-grid:nth-child(1) { width: 33%; height: 33%; }
-        .radar-grid:nth-child(2) { width: 66%; height: 66%; }
-        .radar-grid:nth-child(3) { width: 100%; height: 100%; }
-
-        .radar-crosshair-x, .radar-crosshair-y {
+        .radar-ring {
             position: absolute;
-            background: rgba(6, 182, 212, 0.1);
-            pointer-events: none;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 1px dashed rgba(6, 182, 212, 0.25);
         }
-        .radar-crosshair-x { width: 100%; height: 1px; }
-        .radar-crosshair-y { width: 1px; height: 100%; }
+        .radar-ring.r1 { width: 33%; height: 33%; }
+        .radar-ring.r2 { width: 66%; height: 66%; }
+        .radar-ring.r3 { width: 100%; height: 100%; }
 
         .radar-sweep {
             position: absolute;
-            width: 50%;
-            height: 50%;
-            top: 0;
-            left: 50%;
-            transform-origin: bottom left;
-            background: conic-gradient(from 0deg at 0% 100%, rgba(6, 182, 212, 0.3) 0deg, transparent 50deg);
-            animation: sweep 3s linear infinite;
-            pointer-events: none;
+            top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.35) 0deg, transparent 60deg);
+            animation: sweep 4s linear infinite;
         }
 
         @keyframes sweep {
@@ -154,421 +164,461 @@
             100% { transform: rotate(360deg); }
         }
 
-        .user-dot {
+        .radar-center-dot {
             position: absolute;
-            width: 10px;
-            height: 10px;
+            top: 50%; left: 50%;
+            width: 8px; height: 8px;
+            background: #fff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 10px #fff;
+            z-index: 2;
         }
 
-        .user-dot.me {
-            background-color: var(--accent-cyan);
-            box-shadow: 0 0 12px var(--accent-cyan);
+        .radar-blip-container {
+            position: absolute;
+            transform: translate(-50%, -50%);
             z-index: 10;
-        }
-
-        .user-dot.other {
-            background-color: var(--danger-red);
-            box-shadow: 0 0 12px var(--danger-red);
-            z-index: 5;
-            animation: pulse-dot 2s infinite;
-        }
-
-        @keyframes pulse-dot {
-            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            50% { transform: translate(-50%, -50%) scale(1.4); opacity: 0.7; }
-            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-
-        /* Stat Counter Boxen */
-        .stats-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 16px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 12px;
-            text-align: center;
-        }
-
-        .stat-num {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--accent-cyan);
-        }
-
-        .stat-desc {
-            font-size: 0.7rem;
-            color: var(--text-sub);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 2px;
-        }
-
-        /* Controls */
-        .controls-group {
             display: flex;
             flex-direction: column;
-            gap: 14px;
-        }
-
-        .input-field {
-            width: 100%;
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            padding: 12px 16px;
-            color: white;
-            font-size: 0.95rem;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .input-field:focus {
-            border-color: var(--accent-cyan);
-        }
-
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border-radius: 12px;
-            border: none;
-            font-weight: 600;
-            font-size: 0.95rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-connect {
-            background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-            color: white;
-            box-shadow: 0 4px 12px var(--accent-glow);
-        }
-
-        .btn-connect:active { transform: scale(0.98); }
-
-        .btn-disconnect {
-            background: rgba(244, 63, 94, 0.15);
-            border: 1px solid rgba(244, 63, 94, 0.3);
-            color: var(--danger-red);
-        }
-
-        /* Modern Walkie-Talkie PTT Button */
-        .btn-ptt {
-            height: 72px;
-            border-radius: 36px;
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
-            display: flex;
             align-items: center;
+            pointer-events: none;
+        }
+
+        .radar-blip {
+            width: 12px;
+            height: 12px;
+            background-color: #00ffff;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #00ffff;
+        }
+
+        .radar-blip-label {
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid var(--accent-cyan);
+            color: #fff;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 6px;
+            margin-top: 2px;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+
+        .users-list {
+            width: 100%;
+            max-width: 320px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            max-height: 110px;
+            overflow-y: auto;
+        }
+
+        .users-list h3 {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .user-item:last-child { border-bottom: none; }
+        .user-name { font-weight: 600; color: var(--text-primary); }
+        .user-dist { color: var(--accent-cyan); font-weight: 700; }
+
+        .talk-btn {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(145deg, #131b2e, #0b101d);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
             justify-content: center;
-            gap: 10px;
-            user-select: none;
-            touch-action: manipulation;
+            align-items: center;
+            cursor: pointer;
+            z-index: 2;
+            transition: all 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+            margin-bottom: 12px;
         }
 
-        .btn-ptt:disabled {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-sub);
-            box-shadow: none;
-            cursor: not-allowed;
-            border: 1px solid var(--card-border);
-        }
+        .talk-btn svg { width: 32px; height: 32px; fill: var(--text-secondary); }
+        .talk-btn span { font-size: 0.7rem; margin-top: 4px; font-weight: 700; color: var(--text-secondary); }
 
-        .btn-ptt.active {
-            background: linear-gradient(135deg, #f43f5e, #e11d48);
-            box-shadow: 0 0 25px rgba(244, 63, 94, 0.6);
-            transform: scale(0.97);
+        .talk-btn.active {
+            background: linear-gradient(145deg, #1f1015, #2b090a);
+            box-shadow: 0 0 25px var(--active-glow);
         }
-
-        .gps-status-text {
-            font-size: 0.75rem;
-            text-align: center;
-            color: var(--text-sub);
-        }
+        .talk-btn.active svg, .talk-btn.active span { fill: var(--active-red); color: var(--active-red); }
     </style>
 </head>
 <body>
 
-<div class="app-container">
-    <div class="header">
-        <h1>Talk-to-Me</h1>
-        <div id="status-badge" class="status-pill">
-            <span class="status-dot"></span>
-            <span id="status-text">Getrennt</span>
+    <div class="modal-overlay" id="nameModal">
+        <div class="modal-card">
+            <h2>Willkommen!</h2>
+            <p>Gib deinen Namen ein, um auf dem Radar zu erscheinen.</p>
+            <input type="text" id="usernameInput" placeholder="Dein Name..." maxlength="15">
+            <button id="startAppBtn">STARTEN</button>
         </div>
     </div>
 
-    <div class="glass-card">
-        <div class="radar-wrapper" id="radar">
-            <div class="radar-grid"></div>
-            <div class="radar-grid"></div>
-            <div class="radar-grid"></div>
-            <div class="radar-crosshair-x"></div>
-            <div class="radar-crosshair-y"></div>
-            <div class="radar-sweep"></div>
-            <div class="user-dot me" style="top: 50%; left: 50%;"></div>
+    <header>
+        <h1>TALK TO ME</h1>
+        <div class="stats-bar">
+            <div class="stat-badge">Server: <span id="totalOnlineCount">0</span> Online</div>
+            <div class="stat-badge">Umkreis (500m): <span id="nearbyCount">0</span></div>
         </div>
+        <div class="gps-status" id="gpsStatus">GPS Status: Bereit...</div>
+    </header>
 
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-num" id="count-online">0</div>
-                <div class="stat-desc">Server Online</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-num" id="count-nearby">0</div>
-                <div class="stat-desc">In 500m Umkreis</div>
-            </div>
+    <div class="radar-box" id="radarBox">
+        <div class="radar-ring r1"></div>
+        <div class="radar-ring r2"></div>
+        <div class="radar-ring r3"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-center-dot"></div>
+    </div>
+
+    <div class="users-list">
+        <h3>Teilnehmer in der Nähe</h3>
+        <div id="userContainer">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Nicht verbunden. Drücke VERBINDEN.</div>
         </div>
     </div>
 
-    <div class="glass-card controls-group">
-        <input type="text" id="username" class="input-field" placeholder="Dein Funkname..." value="Anonym">
-        <button id="btn-toggle" class="btn btn-connect" onclick="toggleConnection()">Verbinden</button>
-        <button id="btn-talk" class="btn btn-ptt" disabled>
-            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-            <span>Halten zum Sprechen</span>
-        </button>
-        <div id="gps-info" class="gps-status-text">GPS: Inaktiv</div>
-    </div>
-</div>
+    <button class="talk-btn" id="talkBtn">
+        <svg viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+        <span id="btnLabel">VERBINDEN</span>
+    </button>
 
-<script>
-    const SERVER_URL = "wss://talk-to-me-spcc.onrender.com/ws";
-    const MAX_RADAR_RADIUS_METERS = 500;
+    <script>
+        const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
-    let ws = null;
-    let myClientId = 'user_' + Math.random().toString(36).substring(2, 9);
-    let watchId = null;
-    let currentLat = 0;
-    let currentLng = 0;
-    let audioContext = null;
-    let mediaStream = null;
-    let processor = null;
+        // Generiere eine eindeutige ID pro Gerät
+        let myClientId = "user_" + Math.random().toString(36).substring(2, 9);
+        let myUsername = "Anonym_" + Math.floor(Math.random() * 899 + 100);
 
-    function setStatus(text, isConnected) {
-        const badge = document.getElementById('status-badge');
-        document.getElementById('status-text').innerText = text;
-        if (isConnected) {
-            badge.classList.add('connected');
-        } else {
-            badge.classList.remove('connected');
+        let isConnected = false;
+        let socket = null;
+        let audioContext = null;
+        let audioProcessor = null;
+        let mediaStream = null;
+        let micSource = null;
+        let nextPlayTime = 0;
+        let watchId = null;
+        let heartbeatInterval = null;
+
+        let currentLat = 52.5200;
+        let currentLng = 13.4050;
+
+        const nameModal = document.getElementById('nameModal');
+        const usernameInput = document.getElementById('usernameInput');
+        const startAppBtn = document.getElementById('startAppBtn');
+        const talkBtn = document.getElementById('talkBtn');
+        const btnLabel = document.getElementById('btnLabel');
+        const totalOnlineCount = document.getElementById('totalOnlineCount');
+        const nearbyCount = document.getElementById('nearbyCount');
+        const userContainer = document.getElementById('userContainer');
+        const radarBox = document.getElementById('radarBox');
+        const gpsStatus = document.getElementById('gpsStatus');
+
+        function log(msg) {
+            console.log(msg);
         }
-    }
 
-    function toggleConnection() {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            disconnect();
-        } else {
-            connect();
-        }
-    }
-
-    function connect() {
-        setStatus("Verbinde...", false);
-
-        ws = new WebSocket(SERVER_URL);
-        ws.binaryType = "arraybuffer";
-
-        ws.onopen = () => {
-            setStatus("Verbunden", true);
-            const btn = document.getElementById('btn-toggle');
-            btn.innerText = "Trennen";
-            btn.className = "btn btn-disconnect";
-            document.getElementById('btn-talk').disabled = false;
-
-            startGPS();
-            initAudio();
-        };
-
-        ws.onmessage = (event) => {
-            if (typeof event.data === "string") {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === "radar_update") {
-                        document.getElementById('count-online').innerText = data.total_online || 0;
-                        document.getElementById('count-nearby').innerText = data.nearby_users ? data.nearby_users.length : 0;
-                        updateRadar(data.nearby_users || []);
-                    }
-                } catch (e) {
-                    console.error("JSON Error:", e);
-                }
-            } else if (event.data instanceof ArrayBuffer) {
-                playAudio(event.data);
+        startAppBtn.addEventListener('click', () => {
+            const name = usernameInput.value.trim();
+            if (name.length > 0) {
+                myUsername = name;
+                nameModal.style.display = 'none';
+                log("Name gesetzt: " + myUsername);
             }
-        };
-
-        ws.onerror = () => setStatus("Verbindungsfehler", false);
-
-        ws.onclose = () => {
-            setStatus("Getrennt", false);
-            const btn = document.getElementById('btn-toggle');
-            btn.innerText = "Verbinden";
-            btn.className = "btn btn-connect";
-            document.getElementById('btn-talk').disabled = true;
-            stopGPS();
-            clearRadar();
-        };
-    }
-
-    function disconnect() {
-        if (ws) ws.close();
-    }
-
-    // GPS Handling
-    function startGPS() {
-        if ("geolocation" in navigator) {
-            document.getElementById('gps-info').innerText = "GPS: Ortung wird gestartet...";
-            watchId = navigator.geolocation.watchPosition(
-                (pos) => {
-                    currentLat = pos.coords.latitude;
-                    currentLng = pos.coords.longitude;
-                    document.getElementById('gps-info').innerText = "GPS: Signal aktiv (Echtzeit)";
-                    document.getElementById('gps-info').style.color = "#34d399";
-                    sendLocation();
-                },
-                (err) => {
-                    document.getElementById('gps-info').innerText = "GPS-Fehler: " + err.message;
-                    document.getElementById('gps-info').style.color = "#f43f5e";
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-    }
-
-    function stopGPS() {
-        if (watchId) navigator.geolocation.clearWatch(watchId);
-        document.getElementById('gps-info').innerText = "GPS: Inaktiv";
-        document.getElementById('gps-info').style.color = "var(--text-sub)";
-    }
-
-    function sendLocation() {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            const username = document.getElementById('username').value || "Anonym";
-            ws.send(JSON.stringify({
-                type: "location",
-                client_id: myClientId,
-                username: username,
-                lat: currentLat,
-                lng: currentLng
-            }));
-        }
-    }
-
-    // Radar rendering
-    function updateRadar(users) {
-        clearRadar();
-        const radar = document.getElementById('radar');
-
-        users.forEach(user => {
-            const xPct = 50 + (user.x / MAX_RADAR_RADIUS_METERS) * 45; 
-            const yPct = 50 - (user.y / MAX_RADAR_RADIUS_METERS) * 45;
-
-            const clampedX = Math.max(8, Math.min(92, xPct));
-            const clampedY = Math.max(8, Math.min(92, yPct));
-
-            const dot = document.createElement('div');
-            dot.className = 'user-dot other';
-            dot.style.left = `${clampedX}%`;
-            dot.style.top = `${clampedY}%`;
-            dot.title = `${user.username} (${user.distance}m)`;
-
-            radar.appendChild(dot);
         });
-    }
 
-    function clearRadar() {
-        document.querySelectorAll('.user-dot.other').forEach(d => d.remove());
-    }
-
-    // Audio / Walkie Talkie
-    async function initAudio() {
-        try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-        } catch (e) {
-            console.error("Audio Init Error:", e);
-        }
-    }
-
-    const talkBtn = document.getElementById('btn-talk');
-
-    const startTalking = async (e) => {
-        e.preventDefault();
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-        talkBtn.classList.add('active');
-        talkBtn.querySelector('span').innerText = "Übertragung läuft...";
-
-        try {
-            if (audioContext && audioContext.state === 'suspended') {
+        async function initAndUnlockAudio() {
+            if (!audioContext) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioCtx();
+            }
+            if (audioContext.state === 'suspended') {
                 await audioContext.resume();
             }
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+        }
 
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const source = audioContext.createMediaStreamSource(mediaStream);
-            processor = audioContext.createScriptProcessor(4096, 1, 1);
+        function connectToServer() {
+            log("Verbinde mit Server...");
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Server...</div>`;
 
-            source.connect(processor);
-            processor.connect(audioContext.destination);
+            try {
+                socket = new WebSocket(RENDER_WEBSOCKET_URL);
+                socket.binaryType = "arraybuffer";
 
-            processor.onaudioprocess = (e) => {
-                if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                const inputData = e.inputBuffer.getChannelData(0);
-                const pcmData = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+                socket.onopen = () => {
+                    log("WebSocket Verbunden!");
+                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Sende Position...</div>`;
+                    
+                    dispatchLocation(currentLat, currentLng);
+                    
+                    heartbeatInterval = setInterval(() => {
+                        dispatchLocation(currentLat, currentLng);
+                    }, 2000);
+
+                    startGPSWatch();
+                    startPCMStreaming();
+                };
+
+                socket.onmessage = (event) => {
+                    if (typeof event.data === "string") {
+                        log("EMPFANGEN: " + event.data);
+                        try {
+                            const data = JSON.parse(event.data);
+
+                            const onlineTotal = data.total_online ?? data.online_count ?? data.total ?? data.online ?? 1;
+                            totalOnlineCount.textContent = String(onlineTotal);
+
+                            const userList = data.nearby_users || data.users || data.clients || data.list || [];
+                            updateRadarUI(userList);
+                        } catch (e) {
+                            log("JSON Parse-Fehler: " + e.message);
+                        }
+                    } else if (event.data instanceof ArrayBuffer) {
+                        playIncomingPCM(event.data);
+                    }
+                };
+
+                socket.onerror = (err) => {
+                    log("WS-Fehler aufgetreten!");
+                };
+
+                socket.onclose = () => {
+                    log("WS-Verbindung geschlossen.");
+                    if (isConnected) disconnect();
+                };
+            } catch (err) {
+                log("Verbindungs-Fehler: " + err.message);
+            }
+        }
+
+        function startGPSWatch() {
+            if ("geolocation" in navigator) {
+                watchId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        gpsStatus.textContent = "GPS Status: Aktiv (Echtzeit)";
+                        gpsStatus.style.color = "#10b981";
+                        currentLat = pos.coords.latitude;
+                        currentLng = pos.coords.longitude;
+                        dispatchLocation(currentLat, currentLng);
+                    },
+                    (err) => {
+                        gpsStatus.textContent = "GPS eingeschränkt. Standardort genutzt.";
+                        gpsStatus.style.color = "#ef4444";
+                        dispatchLocation(currentLat, currentLng);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            }
+        }
+
+        function dispatchLocation(lat, lng) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const payload = JSON.stringify({
+                    type: 'location',
+                    action: 'location',
+                    id: myClientId,
+                    client_id: myClientId,
+                    lat: parseFloat(lat),
+                    latitude: parseFloat(lat),
+                    lng: parseFloat(lng),
+                    longitude: parseFloat(lng),
+                    username: myUsername,
+                    name: myUsername
+                });
+                socket.send(payload);
+            }
+        }
+
+        function updateRadarUI(users) {
+            if (!Array.isArray(users)) users = [];
+
+            // Filtere ggf. sich selbst heraus, falls der Server das nicht tut
+            const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
+
+            nearbyCount.textContent = String(otherUsers.length);
+            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
+            userContainer.innerHTML = '';
+
+            if (otherUsers.length === 0) {
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in 500m Umkreis.</div>`;
+                return;
+            }
+
+            const radarRadius = 130;
+            const maxDistance = 500;
+
+            otherUsers.forEach((user, index) => {
+                const username = user.username || user.name || user.id || "User";
+                const distance = Math.round(user.distance ?? user.dist ?? 0);
+
+                const item = document.createElement('div');
+                item.className = 'user-item';
+                item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
+                userContainer.appendChild(item);
+
+                const container = document.createElement('div');
+                container.className = 'radar-blip-container';
+
+                const blip = document.createElement('div');
+                blip.className = 'radar-blip';
+
+                const label = document.createElement('div');
+                label.className = 'radar-blip-label';
+                label.textContent = `${username} (${distance}m)`;
+
+                container.appendChild(blip);
+                container.appendChild(label);
+
+                let xVal = user.x ?? user.rel_x ?? 0;
+                let yVal = user.y ?? user.rel_y ?? 0;
+
+                let pxX = (xVal / maxDistance) * radarRadius;
+                let pxY = (yVal / maxDistance) * radarRadius;
+
+                // Versatz für nahe beieinander stehende Punkte
+                if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
+                    const angle = ((index + 1) * 72) * (Math.PI / 180);
+                    pxX = Math.cos(angle) * 50;
+                    pxY = Math.sin(angle) * 50;
                 }
-                ws.send(pcmData.buffer);
+
+                container.style.left = `${130 + pxX}px`;
+                container.style.top = `${130 - pxY}px`;
+
+                radarBox.appendChild(container);
+            });
+        }
+
+        function startPCMStreaming() {
+            if (!mediaStream || !audioContext) return;
+            micSource = audioContext.createMediaStreamSource(mediaStream);
+            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+            audioProcessor.onaudioprocess = (e) => {
+                if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
+                const inputData = e.inputBuffer.getChannelData(0);
+                const pcm16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    let s = Math.max(-1, Math.min(1, inputData[i]));
+                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                const packet = new ArrayBuffer(4 + pcm16.length * 2);
+                const view = new DataView(packet);
+                view.setUint32(0, audioContext.sampleRate, true);
+                new Int16Array(packet, 4).set(pcm16);
+                socket.send(packet);
             };
-        } catch (err) {
-            stopTalking();
-        }
-    };
 
-    const stopTalking = () => {
-        talkBtn.classList.remove('active');
-        talkBtn.querySelector('span').innerText = "Halten zum Sprechen";
-
-        if (processor) {
-            processor.disconnect();
-            processor = null;
+            micSource.connect(audioProcessor);
+            const dummyGain = audioContext.createGain();
+            dummyGain.gain.value = 0;
+            audioProcessor.connect(dummyGain);
+            dummyGain.connect(audioContext.destination);
         }
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(track => track.stop());
-            mediaStream = null;
-        }
-    };
 
-    talkBtn.addEventListener('mousedown', startTalking);
-    talkBtn.addEventListener('mouseup', stopTalking);
-    talkBtn.addEventListener('touchstart', startTalking);
-    talkBtn.addEventListener('touchend', stopTalking);
+        async function playIncomingPCM(arrayBuffer) {
+            if (!audioContext) return;
+            if (audioContext.state === 'suspended') await audioContext.resume();
 
-    function playAudio(arrayBuffer) {
-        if (!audioContext) return;
-        const int16 = new Int16Array(arrayBuffer);
-        const float32 = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) {
-            float32[i] = int16[i] / 0x7FFF;
+            try {
+                const view = new DataView(arrayBuffer);
+                const remoteSampleRate = view.getUint32(0, true);
+                const int16 = new Int16Array(arrayBuffer, 4);
+
+                const float32 = new Float32Array(int16.length);
+                for (let i = 0; i < int16.length; i++) {
+                    float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+                }
+
+                const audioBuffer = audioContext.createBuffer(1, float32.length, remoteSampleRate);
+                audioBuffer.getChannelData(0).set(float32);
+
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                const currentTime = audioContext.currentTime;
+                if (nextPlayTime < currentTime) nextPlayTime = currentTime;
+                source.start(nextPlayTime);
+                nextPlayTime += audioBuffer.duration;
+            } catch (e) {
+                console.error("Audiofehler:", e);
+            }
         }
-        const buffer = audioContext.createBuffer(1, float32.length, 16000);
-        buffer.getChannelData(0).set(float32);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start();
-    }
-</script>
+
+        function disconnect() {
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
+            if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
+            if (micSource) { micSource.disconnect(); micSource = null; }
+            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+            if (socket) socket.close();
+
+            isConnected = false;
+            talkBtn.classList.remove('active');
+            btnLabel.textContent = "VERBINDEN";
+            totalOnlineCount.textContent = "0";
+            nearbyCount.textContent = "0";
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
+            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
+            log("Verbindung getrennt.");
+        }
+
+        talkBtn.addEventListener('click', async () => {
+            await initAndUnlockAudio();
+
+            if (!isConnected) {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true }, 
+                        video: false 
+                    });
+
+                    isConnected = true;
+                    talkBtn.classList.add('active');
+                    btnLabel.textContent = "TRENNEN";
+
+                    connectToServer();
+
+                } catch (err) {
+                    alert("Mikrofon-Zugriff erforderlich.");
+                    log("Mikrofon-Zugriff verweigert.");
+                }
+            } else {
+                disconnect();
+            }
+        });
+    </script>
 </body>
 </html>
