@@ -332,6 +332,7 @@
 
         let currentHeading = 0;
         let smoothedHeading = 0;
+        let lastRenderedHeading = 0;
         let lastUserList = [];
 
         const nameModal = document.getElementById('nameModal');
@@ -393,12 +394,20 @@
                 if (diff > 180) diff -= 360;
                 if (diff < -180) diff += 360;
                 
-                smoothedHeading = (smoothedHeading + diff * 0.05 360) % 360;
-                currentHeading = smoothedHeading;
-                compassHeadingVal.textContent = Math.round(currentHeading) + "°";
+                smoothedHeading = (smoothedHeading + diff * 0.1 + 360) % 360;
 
-                if (lastUserList.length > 0) {
-                    updateRadarUI(lastUserList);
+                let renderDiff = Math.abs(smoothedHeading - lastRenderedHeading);
+                if (renderDiff > 180) renderDiff = 360 - renderDiff;
+
+                if (renderDiff >= 1.0) {
+                    currentHeading = smoothedHeading;
+                    lastRenderedHeading = currentHeading;
+                    
+                    compassHeadingVal.textContent = Math.round(currentHeading) + "°";
+
+                    if (lastUserList.length > 0) {
+                        updateRadarUI(lastUserList);
+                    }
                 }
             }
         }
