@@ -2,107 +2,140 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talk-to-Me Radar Walkie-Talkie</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Talk-to-Me | Radar Walkie-Talkie</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --accent-color: #3b82f6;
-            --accent-hover: #2563eb;
-            --danger-color: #ef4444;
-            --text-color: #f8fafc;
-            --text-muted: #94a3b8;
+            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #070a12 100%);
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #06b6d4;
+            --accent-glow: rgba(6, 182, 212, 0.4);
+            --danger-red: #f43f5e;
+            --success-green: #10b981;
+            --text-main: #f8fafc;
+            --text-sub: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background: var(--bg-gradient);
+            color: var(--text-main);
             min-height: 100vh;
-            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
         }
 
-        .container {
+        .app-container {
             width: 100%;
-            max-width: 450px;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 16px;
         }
 
         .header {
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
         }
 
         .header h1 {
-            margin: 0 0 5px 0;
-            font-size: 1.8rem;
-            color: var(--accent-color);
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #38bdf8, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
-        .status-badge {
-            display: inline-block;
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             padding: 4px 12px;
-            border-radius: 9999px;
-            font-size: 0.85rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
             font-weight: 600;
-            background-color: #334155;
-            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-sub);
         }
 
-        .status-badge.connected {
-            background-color: #065f46;
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-sub);
+        }
+
+        .status-pill.connected {
             color: #34d399;
+            border-color: rgba(52, 211, 153, 0.2);
+            background: rgba(16, 185, 129, 0.1);
         }
 
-        .status-badge.error {
-            background-color: #991b1b;
-            color: #f87171;
+        .status-pill.connected .status-dot {
+            background-color: var(--success-green);
+            box-shadow: 0 0 8px var(--success-green);
         }
 
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 16px;
+        /* Glassmorphism Card */
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
             padding: 20px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
         }
 
-        .radar-container {
+        /* Radar Styling */
+        .radar-wrapper {
             position: relative;
             width: 100%;
             aspect-ratio: 1;
-            background: radial-gradient(circle, #0f172a 0%, #020617 100%);
+            background: radial-gradient(circle, #0c1527 0%, #030712 100%);
             border-radius: 50%;
-            border: 2px solid #334155;
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.1), inset 0 0 15px rgba(0,0,0,0.8);
             overflow: hidden;
             display: flex;
-            justify-content: center;
             align-items: center;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            justify-content: center;
         }
 
-        .radar-ring {
+        .radar-grid {
             position: absolute;
-            border: 1px dashed rgba(59, 130, 246, 0.3);
+            border: 1px dashed rgba(6, 182, 212, 0.15);
             border-radius: 50%;
+            pointer-events: none;
         }
 
-        .radar-ring:nth-child(1) { width: 30%; height: 30%; }
-        .radar-ring:nth-child(2) { width: 60%; height: 60%; }
-        .radar-ring:nth-child(3) { width: 90%; height: 90%; }
+        .radar-grid:nth-child(1) { width: 33%; height: 33%; }
+        .radar-grid:nth-child(2) { width: 66%; height: 66%; }
+        .radar-grid:nth-child(3) { width: 100%; height: 100%; }
 
-        .radar-axis-x, .radar-axis-y {
+        .radar-crosshair-x, .radar-crosshair-y {
             position: absolute;
-            background-color: rgba(59, 130, 246, 0.15);
+            background: rgba(6, 182, 212, 0.1);
+            pointer-events: none;
         }
-        .radar-axis-x { width: 100%; height: 1px; }
-        .radar-axis-y { width: 1px; height: 100%; }
+        .radar-crosshair-x { width: 100%; height: 1px; }
+        .radar-crosshair-y { width: 1px; height: 100%; }
 
         .radar-sweep {
             position: absolute;
@@ -111,177 +144,207 @@
             top: 0;
             left: 50%;
             transform-origin: bottom left;
-            background: conic-gradient(from 0deg at 0% 100%, rgba(59, 130, 246, 0.4) 0deg, transparent 60deg);
-            animation: sweep 4s linear infinite;
+            background: conic-gradient(from 0deg at 0% 100%, rgba(6, 182, 212, 0.3) 0deg, transparent 50deg);
+            animation: sweep 3s linear infinite;
+            pointer-events: none;
         }
 
         @keyframes sweep {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .user-dot {
             position: absolute;
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            transition: all 0.5s ease;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .user-dot.me {
-            background-color: #3b82f6;
-            box-shadow: 0 0 10px #3b82f6;
+            background-color: var(--accent-cyan);
+            box-shadow: 0 0 12px var(--accent-cyan);
             z-index: 10;
         }
 
         .user-dot.other {
-            background-color: #ef4444;
-            box-shadow: 0 0 10px #ef4444;
+            background-color: var(--danger-red);
+            box-shadow: 0 0 12px var(--danger-red);
             z-index: 5;
+            animation: pulse-dot 2s infinite;
         }
 
-        .stats-grid {
+        @keyframes pulse-dot {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1.4); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* Stat Counter Boxen */
+        .stats-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 12px;
             text-align: center;
         }
 
-        .stat-box {
-            background-color: #0f172a;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #334155;
+        .stat-num {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
         }
 
-        .stat-value {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: var(--accent-color);
+        .stat-desc {
+            font-size: 0.7rem;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
         }
 
-        .stat-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
-
-        .controls {
+        /* Controls */
+        .controls-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 14px;
         }
 
-        input[type="text"] {
+        .input-field {
             width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background-color: #0f172a;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 12px 16px;
             color: white;
-            font-size: 1rem;
-            box-sizing: border-box;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
         }
 
-        button {
+        .input-field:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .btn {
             width: 100%;
             padding: 14px;
-            border-radius: 8px;
+            border-radius: 12px;
             border: none;
-            font-size: 1rem;
-            font-weight: bold;
+            font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
         }
 
-        .btn-primary {
-            background-color: var(--accent-color);
+        .btn-connect {
+            background: linear-gradient(135deg, #0ea5e9, #06b6d4);
             color: white;
+            box-shadow: 0 4px 12px var(--accent-glow);
         }
 
-        .btn-primary:hover {
-            background-color: var(--accent-hover);
+        .btn-connect:active { transform: scale(0.98); }
+
+        .btn-disconnect {
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: var(--danger-red);
         }
 
-        .btn-danger {
-            background-color: var(--danger-color);
+        /* Modern Walkie-Talkie PTT Button */
+        .btn-ptt {
+            height: 72px;
+            border-radius: 36px;
+            background: linear-gradient(135deg, #10b981, #059669);
             color: white;
-        }
-
-        .btn-talk {
-            height: 80px;
-            border-radius: 50px;
-            font-size: 1.3rem;
-            background-color: #22c55e;
-            color: white;
-            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
             user-select: none;
-            -webkit-user-select: none;
             touch-action: manipulation;
         }
 
-        .btn-talk:active, .btn-talk.active {
-            background-color: #15803d;
-            transform: scale(0.98);
-        }
-
-        .btn-talk:disabled {
-            background-color: #334155;
-            color: #64748b;
+        .btn-ptt:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-sub);
             box-shadow: none;
             cursor: not-allowed;
+            border: 1px solid var(--card-border);
         }
 
-        .gps-info {
-            font-size: 0.8rem;
+        .btn-ptt.active {
+            background: linear-gradient(135deg, #f43f5e, #e11d48);
+            box-shadow: 0 0 25px rgba(244, 63, 94, 0.6);
+            transform: scale(0.97);
+        }
+
+        .gps-status-text {
+            font-size: 0.75rem;
             text-align: center;
-            color: var(--text-muted);
+            color: var(--text-sub);
         }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="app-container">
     <div class="header">
         <h1>Talk-to-Me</h1>
-        <div id="connection-status" class="status-badge">Getrennt</div>
+        <div id="status-badge" class="status-pill">
+            <span class="status-dot"></span>
+            <span id="status-text">Getrennt</span>
+        </div>
     </div>
 
-    <div class="card">
-        <div class="radar-container" id="radar">
-            <div class="radar-ring"></div>
-            <div class="radar-ring"></div>
-            <div class="radar-ring"></div>
-            <div class="radar-axis-x"></div>
-            <div class="radar-axis-y"></div>
+    <div class="glass-card">
+        <div class="radar-wrapper" id="radar">
+            <div class="radar-grid"></div>
+            <div class="radar-grid"></div>
+            <div class="radar-grid"></div>
+            <div class="radar-crosshair-x"></div>
+            <div class="radar-crosshair-y"></div>
             <div class="radar-sweep"></div>
-            <!-- Eigenes Symbol in der Mitte -->
-            <div class="user-dot me" style="top: 50%; left: 50%;" title="Du"></div>
+            <div class="user-dot me" style="top: 50%; left: 50%;"></div>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="stat-value" id="count-online">0</div>
-                <div class="stat-label">Server Online</div>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-num" id="count-online">0</div>
+                <div class="stat-desc">Server Online</div>
             </div>
-            <div class="stat-box">
-                <div class="stat-value" id="count-nearby">0</div>
-                <div class="stat-label">In 500m Umkreis</div>
+            <div class="stat-card">
+                <div class="stat-num" id="count-nearby">0</div>
+                <div class="stat-desc">In 500m Umkreis</div>
             </div>
         </div>
     </div>
 
-    <div class="card controls">
-        <input type="text" id="username" placeholder="Dein Name" value="Anonym">
-        <button id="btn-connect" class="btn-primary" onclick="toggleConnection()">Verbinden</button>
-        <button id="btn-talk" class="btn-talk" disabled>DRÜCKEN ZUM SPRECHEN</button>
-        <div class="gps-info" id="gps-status">GPS Status: Inaktiv</div>
+    <div class="glass-card controls-group">
+        <input type="text" id="username" class="input-field" placeholder="Dein Funkname..." value="Anonym">
+        <button id="btn-toggle" class="btn btn-connect" onclick="toggleConnection()">Verbinden</button>
+        <button id="btn-talk" class="btn btn-ptt" disabled>
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            <span>Halten zum Sprechen</span>
+        </button>
+        <div id="gps-info" class="gps-status-text">GPS: Inaktiv</div>
     </div>
 </div>
 
 <script>
-    // Konfiguration
     const SERVER_URL = "wss://talk-to-me-spcc.onrender.com/ws";
     const MAX_RADAR_RADIUS_METERS = 500;
 
@@ -294,15 +357,14 @@
     let mediaStream = null;
     let processor = null;
 
-    // Stille Protokollierung (NUR in die Entwickler-Konsole)
-    function log(msg) {
-        console.log(`[App] ${msg}`);
-    }
-
-    function updateStatus(text, type) {
-        const badge = document.getElementById('connection-status');
-        badge.innerText = text;
-        badge.className = 'status-badge ' + type;
+    function setStatus(text, isConnected) {
+        const badge = document.getElementById('status-badge');
+        document.getElementById('status-text').innerText = text;
+        if (isConnected) {
+            badge.classList.add('connected');
+        } else {
+            badge.classList.remove('connected');
+        }
     }
 
     function toggleConnection() {
@@ -314,17 +376,16 @@
     }
 
     function connect() {
-        log("Verbindung wird aufgebaut...");
-        updateStatus("Verbinde...", "");
+        setStatus("Verbinde...", false);
 
         ws = new WebSocket(SERVER_URL);
         ws.binaryType = "arraybuffer";
 
         ws.onopen = () => {
-            log("WebSocket Verbunden!");
-            updateStatus("Verbunden", "connected");
-            document.getElementById('btn-connect').innerText = "Trennen";
-            document.getElementById('btn-connect').className = "btn-danger";
+            setStatus("Verbunden", true);
+            const btn = document.getElementById('btn-toggle');
+            btn.innerText = "Trennen";
+            btn.className = "btn btn-disconnect";
             document.getElementById('btn-talk').disabled = false;
 
             startGPS();
@@ -335,30 +396,26 @@
             if (typeof event.data === "string") {
                 try {
                     const data = JSON.parse(event.data);
-                    
                     if (data.type === "radar_update") {
                         document.getElementById('count-online').innerText = data.total_online || 0;
                         document.getElementById('count-nearby').innerText = data.nearby_users ? data.nearby_users.length : 0;
                         updateRadar(data.nearby_users || []);
                     }
                 } catch (e) {
-                    console.error("JSON Fehler:", e);
+                    console.error("JSON Error:", e);
                 }
             } else if (event.data instanceof ArrayBuffer) {
-                playReceivedAudio(event.data);
+                playAudio(event.data);
             }
         };
 
-        ws.onerror = (err) => {
-            console.error("WebSocket Fehler:", err);
-            updateStatus("Fehler", "error");
-        };
+        ws.onerror = () => setStatus("Verbindungsfehler", false);
 
         ws.onclose = () => {
-            log("Verbindung getrennt.");
-            updateStatus("Getrennt", "");
-            document.getElementById('btn-connect').innerText = "Verbinden";
-            document.getElementById('btn-connect').className = "btn-primary";
+            setStatus("Getrennt", false);
+            const btn = document.getElementById('btn-toggle');
+            btn.innerText = "Verbinden";
+            btn.className = "btn btn-connect";
             document.getElementById('btn-talk').disabled = true;
             stopGPS();
             clearRadar();
@@ -369,68 +426,62 @@
         if (ws) ws.close();
     }
 
-    // GPS Handhabung
+    // GPS Handling
     function startGPS() {
         if ("geolocation" in navigator) {
-            document.getElementById('gps-status').innerText = "GPS Status: Suche Signal...";
+            document.getElementById('gps-info').innerText = "GPS: Ortung wird gestartet...";
             watchId = navigator.geolocation.watchPosition(
                 (pos) => {
                     currentLat = pos.coords.latitude;
                     currentLng = pos.coords.longitude;
-                    document.getElementById('gps-status').innerText = "GPS Status: Aktiv (Echtzeit)";
-                    document.getElementById('gps-status').style.color = "#34d399";
+                    document.getElementById('gps-info').innerText = "GPS: Signal aktiv (Echtzeit)";
+                    document.getElementById('gps-info').style.color = "#34d399";
                     sendLocation();
                 },
                 (err) => {
-                    document.getElementById('gps-status').innerText = "GPS Fehler: " + err.message;
-                    document.getElementById('gps-status').style.color = "#f87171";
+                    document.getElementById('gps-info').innerText = "GPS-Fehler: " + err.message;
+                    document.getElementById('gps-info').style.color = "#f43f5e";
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
-        } else {
-            document.getElementById('gps-status').innerText = "GPS nicht unterstützt";
         }
     }
 
     function stopGPS() {
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        document.getElementById('gps-status').innerText = "GPS Status: Inaktiv";
-        document.getElementById('gps-status').style.color = "var(--text-muted)";
+        document.getElementById('gps-info').innerText = "GPS: Inaktiv";
+        document.getElementById('gps-info').style.color = "var(--text-sub)";
     }
 
     function sendLocation() {
         if (ws && ws.readyState === WebSocket.OPEN) {
             const username = document.getElementById('username').value || "Anonym";
-            const payload = {
+            ws.send(JSON.stringify({
                 type: "location",
                 client_id: myClientId,
                 username: username,
                 lat: currentLat,
                 lng: currentLng
-            };
-            ws.send(JSON.stringify(payload));
+            }));
         }
     }
 
-    // Radar Zeichnen
+    // Radar rendering
     function updateRadar(users) {
         clearRadar();
         const radar = document.getElementById('radar');
 
         users.forEach(user => {
-            // Skaliere Meter auf Prozentpunkte auf dem Radar (500m Max-Radius)
-            const maxPx = radar.clientWidth / 2;
             const xPct = 50 + (user.x / MAX_RADAR_RADIUS_METERS) * 45; 
             const yPct = 50 - (user.y / MAX_RADAR_RADIUS_METERS) * 45;
 
-            // Begrenzen, damit Dots auf dem Radar bleiben
-            const clampedXPct = Math.max(5, Math.min(95, xPct));
-            const clampedYPct = Math.max(5, Math.min(95, yPct));
+            const clampedX = Math.max(8, Math.min(92, xPct));
+            const clampedY = Math.max(8, Math.min(92, yPct));
 
             const dot = document.createElement('div');
             dot.className = 'user-dot other';
-            dot.style.left = `${clampedXPct}%`;
-            dot.style.top = `${clampedYPct}%`;
+            dot.style.left = `${clampedX}%`;
+            dot.style.top = `${clampedY}%`;
             dot.title = `${user.username} (${user.distance}m)`;
 
             radar.appendChild(dot);
@@ -438,16 +489,15 @@
     }
 
     function clearRadar() {
-        const dots = document.querySelectorAll('.user-dot.other');
-        dots.forEach(d => d.remove());
+        document.querySelectorAll('.user-dot.other').forEach(d => d.remove());
     }
 
-    // Audio / Walkie-Talkie Handhabung
+    // Audio / Walkie Talkie
     async function initAudio() {
         try {
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         } catch (e) {
-            console.error("AudioInit Fehler:", e);
+            console.error("Audio Init Error:", e);
         }
     }
 
@@ -458,14 +508,14 @@
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
         talkBtn.classList.add('active');
-        talkBtn.innerText = "SPRICHT...";
+        talkBtn.querySelector('span').innerText = "Übertragung läuft...";
 
         try {
             if (audioContext && audioContext.state === 'suspended') {
                 await audioContext.resume();
             }
 
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const source = audioContext.createMediaStreamSource(mediaStream);
             processor = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -475,8 +525,6 @@
             processor.onaudioprocess = (e) => {
                 if (!ws || ws.readyState !== WebSocket.OPEN) return;
                 const inputData = e.inputBuffer.getChannelData(0);
-                
-                // Konvertiere Float32 Audio-Buffer in Int16 für PCM
                 const pcmData = new Int16Array(inputData.length);
                 for (let i = 0; i < inputData.length; i++) {
                     pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
@@ -484,14 +532,13 @@
                 ws.send(pcmData.buffer);
             };
         } catch (err) {
-            console.error("Mikrofon Fehler:", err);
             stopTalking();
         }
     };
 
     const stopTalking = () => {
         talkBtn.classList.remove('active');
-        talkBtn.innerText = "DRÜCKEN ZUM SPRECHEN";
+        talkBtn.querySelector('span').innerText = "Halten zum Sprechen";
 
         if (processor) {
             processor.disconnect();
@@ -508,25 +555,20 @@
     talkBtn.addEventListener('touchstart', startTalking);
     talkBtn.addEventListener('touchend', stopTalking);
 
-    function playReceivedAudio(arrayBuffer) {
+    function playAudio(arrayBuffer) {
         if (!audioContext) return;
-
-        const int16Array = new Int16Array(arrayBuffer);
-        const float32Array = new Float32Array(int16Array.length);
-
-        for (let i = 0; i < int16Array.length; i++) {
-            float32Array[i] = int16Array[i] / 0x7FFF;
+        const int16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) {
+            float32[i] = int16[i] / 0x7FFF;
         }
-
-        const buffer = audioContext.createBuffer(1, float32Array.length, 16000);
-        buffer.getChannelData(0).set(float32Array);
-
+        const buffer = audioContext.createBuffer(1, float32.length, 16000);
+        buffer.getChannelData(0).set(float32);
         const source = audioContext.createBufferSource();
         source.buffer = buffer;
         source.connect(audioContext.destination);
         source.start();
     }
 </script>
-
 </body>
 </html>
