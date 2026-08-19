@@ -7,7 +7,7 @@
     <style>
         :root {
             --bg-color: #0b0f17;
-            --card-bg: rgba(22, 30, 46, 0.7);
+            --card-bg: rgba(22, 30, 46, 0.75);
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --accent-cyan: #06b6d4;
@@ -60,14 +60,14 @@
         }
 
         .modal-card h2 { font-size: 1.3rem; margin-bottom: 8px; }
-        .modal-card p { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px; }
+        .modal-card p { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px; }
 
         .modal-card input {
             width: 100%;
             padding: 12px 16px;
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.4);
             color: #fff;
             font-size: 1rem;
             outline: none;
@@ -296,7 +296,7 @@
     <div class="users-list">
         <h3>Teilnehmer in der Nähe</h3>
         <div id="userContainer">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Warte auf Verbindung...</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Nicht verbunden. Drücke VERBINDEN.</div>
         </div>
     </div>
 
@@ -309,6 +309,7 @@
     </button>
 
     <script>
+        // Deine exakte Render Web-Socket Adresse
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
         let myUsername = "Anonym";
@@ -360,39 +361,56 @@
         }
 
         function connectToServer() {
-            socket = new WebSocket(RENDER_WEBSOCKET_URL);
-            socket.binaryType = "arraybuffer";
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Render... (Bitte max 30s warten falls Render schläft)</div>`;
 
-            socket.onopen = () => {
-                // SOFORT Standort senden (Handshake), ohne auf GPS-Hardware zu warten
-                dispatchLocation(currentLat, currentLng);
-                
-                // Alle 2 Sekunden Erneuerung senden
-                heartbeatInterval = setInterval(() => {
+            try {
+                socket = new WebSocket(RENDER_WEBSOCKET_URL);
+                socket.binaryType = "arraybuffer";
+
+                socket.onopen = () => {
+                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Empfange Daten...</div>`;
+                    
+                    // Sofort-Handshake
                     dispatchLocation(currentLat, currentLng);
-                }, 2000);
+                    
+                    // Dauersignal alle 2 Sek.
+                    heartbeatInterval = setInterval(() => {
+                        dispatchLocation(currentLat, currentLng);
+                    }, 2000);
 
-                startGPSWatch();
-                startPCMStreaming();
-            };
+                    startGPSWatch();
+                    startPCMStreaming();
+                };
 
-            socket.onmessage = (event) => {
-                if (typeof event.data === "string") {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'radar_update') {
-                            totalOnlineCount.textContent = String(data.total_online);
-                            updateRadarUI(data.nearby_users);
+                socket.onmessage = (event) => {
+                    if (typeof event.data === "string") {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'radar_update') {
+                                totalOnlineCount.textContent = String(data.total_online);
+                                updateRadarUI(data.nearby_users);
+                            }
+                        } catch (e) {
+                            console.error("Fehler beim Empfang:", e);
                         }
-                    } catch (e) {
-                        console.error("Fehler beim Empfang:", e);
+                    } else if (event.data instanceof ArrayBuffer) {
+                        playIncomingPCM(event.data);
                     }
-                } else if (event.data instanceof ArrayBuffer) {
-                    playIncomingPCM(event.data);
-                }
-            };
+                };
 
-            socket.onclose = () => { if (isConnected) disconnect(); };
+                socket.onerror = (err) => {
+                    console.error("WebSocket Fehler:", err);
+                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #ef4444; text-align: center;">Fehler beim Verbinden. Ist der Render-Server gestartet?</div>`;
+                };
+
+                socket.onclose = () => {
+                    if (isConnected) {
+                        disconnect();
+                    }
+                };
+            } catch (err) {
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #ef4444; text-align: center;">Netzwerkfehler!</div>`;
+            }
         }
 
         function startGPSWatch() {
@@ -406,7 +424,7 @@
                         dispatchLocation(currentLat, currentLng);
                     },
                     (err) => {
-                        gpsStatus.textContent = "GPS eingeschränkt! Nutze Simulations-Modus.";
+                        gpsStatus.textContent = "GPS eingeschränkt. Standard-Ort verwendet.";
                         gpsStatus.style.color = "#ef4444";
                         dispatchLocation(currentLat, currentLng);
                     },
@@ -560,10 +578,11 @@
                         video: false 
                     });
 
-                    connectToServer();
                     isConnected = true;
                     talkBtn.classList.add('active');
                     btnLabel.textContent = "TRENNEN";
+
+                    connectToServer();
 
                 } catch (err) {
                     alert("Mikrofon-Zugriff erforderlich.");

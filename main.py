@@ -56,7 +56,7 @@ class ConnectionManager:
     async def broadcast_radar(self):
         total_online = len(self.active_connections)
 
-        for target in self.active_connections:
+        for target in list(self.active_connections):
             nearby_users = []
             
             for other in self.active_connections:
@@ -85,7 +85,7 @@ class ConnectionManager:
                 pass
 
     async def broadcast_audio(self, sender_info: dict, data: bytes):
-        for target in self.active_connections:
+        for target in list(self.active_connections):
             if target is sender_info:
                 continue
 
@@ -105,7 +105,6 @@ async def radar_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Garantiert den Start der Hintergrundschleife auf Render
     task = asyncio.create_task(radar_loop())
     yield
     task.cancel()
@@ -127,6 +126,9 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+
             if "text" in message and message["text"]:
                 try:
                     data = json.loads(message["text"])
@@ -143,8 +145,9 @@ async def websocket_endpoint(websocket: WebSocket):
             elif "bytes" in message and message["bytes"]:
                 await manager.broadcast_audio(conn_info, message["bytes"])
     except WebSocketDisconnect:
-        manager.disconnect(conn_info)
-        await manager.broadcast_radar()
+        pass
     except Exception:
+        pass
+    finally:
         manager.disconnect(conn_info)
         await manager.broadcast_radar()
