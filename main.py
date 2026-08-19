@@ -1,6 +1,5 @@
 import math
 import json
-import struct
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +25,6 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-# Errechnet x/y Koordinaten (Meter) relativ zum Mittelpunkt für das Radar
 def get_relative_position(lat1, lon1, lat2, lon2):
     R = 6371000
     d_lat = math.radians(lat2 - lat1)
@@ -62,30 +60,33 @@ class ConnectionManager:
             conn_info["username"] = username
 
     async def broadcast_radar(self):
-        # Sendet jedem Nutzer die nearby User inkl. Distanz & relativen Koordinaten
+        total_online = len(self.active_connections)
+
         for target in self.active_connections:
-            if target["lat"] is None or target["lng"] is None:
-                continue
-
             nearby_users = []
-            for other in self.active_connections:
-                if other is target or other["lat"] is None or other["lng"] is None:
-                    continue
+            
+            # Falls dieses Handy selbst ein GPS Signal hat, Nahbereich berechnen
+            if target["lat"] is not None and target["lng"] is not None:
+                for other in self.active_connections:
+                    if other is target or other["lat"] is None or other["lng"] is None:
+                        continue
 
-                dist = haversine(target["lat"], target["lng"], other["lat"], other["lng"])
-                if dist <= 500:
-                    rel_x, rel_y = get_relative_position(target["lat"], target["lng"], other["lat"], other["lng"])
-                    nearby_users.append({
-                        "username": other["username"],
-                        "distance": round(dist),
-                        "x": round(rel_x, 1),
-                        "y": round(rel_y, 1)
-                    })
+                    dist = haversine(target["lat"], target["lng"], other["lat"], other["lng"])
+                    if dist <= 500:
+                        rel_x, rel_y = get_relative_position(target["lat"], target["lng"], other["lat"], other["lng"])
+                        nearby_users.append({
+                            "username": other["username"],
+                            "distance": round(dist),
+                            "x": round(rel_x, 1),
+                            "y": round(rel_y, 1)
+                        })
 
             radar_data = {
                 "type": "radar_update",
+                "total_online": total_online,
                 "nearby_users": nearby_users
             }
+            
             try:
                 await target["ws"].send_json(radar_data)
             except Exception:
@@ -108,7 +109,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Background-Task: Radar alle 2 Sekunden aktualisieren
 async def radar_loop():
     while True:
         await asyncio.sleep(2)
@@ -137,5 +137,5 @@ async def websocket_endpoint(websocket: WebSocket):
                 await manager.broadcast_audio(conn_info, message["bytes"])
     except WebSocketDisconnect:
         manager.disconnect(conn_info)
-    except Exception as e:
+    except Exception:
         manager.disconnect(conn_info)

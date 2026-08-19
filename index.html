@@ -11,7 +11,6 @@
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --accent-cyan: #06b6d4;
-            --accent-glow: rgba(6, 182, 212, 0.4);
             --active-red: #ef4444;
             --active-glow: rgba(239, 68, 68, 0.5);
             --status-green: #10b981;
@@ -37,7 +36,6 @@
             overflow-x: hidden;
         }
 
-        /* Modal für Namensabfrage */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -61,17 +59,8 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        .modal-card h2 {
-            font-size: 1.3rem;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-        }
-
-        .modal-card p {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 20px;
-        }
+        .modal-card h2 { font-size: 1.3rem; margin-bottom: 8px; }
+        .modal-card p { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px; }
 
         .modal-card input {
             width: 100%;
@@ -104,7 +93,7 @@
             width: 100%;
             max-width: 400px;
             text-align: center;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         h1 {
@@ -115,40 +104,35 @@
             -webkit-text-fill-color: transparent;
         }
 
-        .status-container {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
+        .stats-bar {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .stat-badge {
             background: var(--card-bg);
-            padding: 6px 14px;
-            border-radius: 20px;
-            margin-top: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            border: 1px solid rgba(255,255,255,0.05);
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--text-secondary);
-        }
-
-        .status-dot.active {
-            background-color: var(--active-red);
-            box-shadow: 0 0 10px var(--active-red);
-        }
+        .stat-badge span { color: var(--accent-cyan); font-weight: 700; }
 
         /* 📡 RADAR VISUALISIERUNG */
         .radar-box {
             position: relative;
-            width: 240px;
-            height: 240px;
+            width: 260px;
+            height: 260px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(6, 182, 212, 0.05) 0%, rgba(11, 15, 23, 0.8) 100%);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            margin: 10px 0;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.08) 0%, rgba(11, 15, 23, 0.9) 100%);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            margin: 12px 0;
             overflow: hidden;
-            box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.2);
         }
 
         .radar-ring {
@@ -156,7 +140,7 @@
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             border-radius: 50%;
-            border: 1px dashed rgba(6, 182, 212, 0.2);
+            border: 1px dashed rgba(6, 182, 212, 0.25);
         }
         .radar-ring.r1 { width: 33%; height: 33%; }
         .radar-ring.r2 { width: 66%; height: 66%; }
@@ -166,7 +150,7 @@
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             border-radius: 50%;
-            background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.4) 0deg, transparent 60deg);
+            background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.35) 0deg, transparent 60deg);
             animation: sweep 4s linear infinite;
         }
 
@@ -182,24 +166,42 @@
             background: #fff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 8px #fff;
-            z-index: 5;
+            box-shadow: 0 0 10px #fff;
+            z-index: 2;
         }
 
-        /* User Blips auf dem Radar */
-        .radar-blip {
+        /* User Blips & Label auf dem Radar */
+        .radar-blip-container {
             position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: var(--accent-cyan);
-            border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px var(--accent-cyan);
-            z-index: 4;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
             transition: all 0.5s ease;
         }
 
-        /* User Liste */
+        .radar-blip {
+            width: 10px;
+            height: 10px;
+            background-color: #00ffff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #00ffff;
+        }
+
+        .radar-blip-label {
+            background: rgba(0, 0, 0, 0.75);
+            border: 1px solid var(--accent-cyan);
+            color: #fff;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 6px;
+            margin-top: 2px;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+
         .users-list {
             width: 100%;
             max-width: 320px;
@@ -208,16 +210,16 @@
             padding: 12px;
             margin-bottom: 12px;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            max-height: 100px;
+            max-height: 110px;
             overflow-y: auto;
         }
 
         .users-list h3 {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .user-item {
@@ -230,9 +232,8 @@
 
         .user-item:last-child { border-bottom: none; }
         .user-name { font-weight: 600; color: var(--text-primary); }
-        .user-dist { color: var(--accent-cyan); }
+        .user-dist { color: var(--accent-cyan); font-weight: 700; }
 
-        /* PTT Button */
         .talk-btn {
             width: 120px;
             height: 120px;
@@ -263,11 +264,10 @@
 </head>
 <body>
 
-    <!-- Namens-Dialog -->
     <div class="modal-overlay" id="nameModal">
         <div class="modal-card">
             <h2>Willkommen!</h2>
-            <p>Gib deinen Namen ein, um für Personen in 500m Umkreis auf dem Radar zu erscheinen.</p>
+            <p>Gib deinen Namen ein, um auf dem Radar der anderen Personen zu erscheinen.</p>
             <input type="text" id="usernameInput" placeholder="Dein Name..." maxlength="15">
             <button id="startAppBtn">STARTEN</button>
         </div>
@@ -275,13 +275,12 @@
 
     <header>
         <h1>TALK TO ME</h1>
-        <div class="status-container">
-            <div class="status-dot" id="statusDot"></div>
-            <span style="font-size: 0.8rem; color: var(--text-secondary);" id="statusText">Bereit</span>
+        <div class="stats-bar">
+            <div class="stat-badge">Server: <span id="totalOnlineCount">0</span> Online</div>
+            <div class="stat-badge">Umkreis (500m): <span id="nearbyCount">0</span></div>
         </div>
     </header>
 
-    <!-- Radar Schirm -->
     <div class="radar-box" id="radarBox">
         <div class="radar-ring r1"></div>
         <div class="radar-ring r2"></div>
@@ -290,15 +289,13 @@
         <div class="radar-center-dot"></div>
     </div>
 
-    <!-- Live Umkreis User Liste -->
     <div class="users-list">
-        <h3>In deiner Nähe (<span id="userCount">0</span>)</h3>
+        <h3>Teilnehmer in der Nähe</h3>
         <div id="userContainer">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Scanne Umkreis...</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Warte auf Verbindung...</div>
         </div>
     </div>
 
-    <!-- Funk Button -->
     <button class="talk-btn" id="talkBtn">
         <svg viewBox="0 0 24 24">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
@@ -318,16 +315,16 @@
         let mediaStream = null;
         let micSource = null;
         let nextPlayTime = 0;
+        let gpsInterval = null;
 
         const nameModal = document.getElementById('nameModal');
         const usernameInput = document.getElementById('usernameInput');
         const startAppBtn = document.getElementById('startAppBtn');
         const talkBtn = document.getElementById('talkBtn');
         const btnLabel = document.getElementById('btnLabel');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
+        const totalOnlineCount = document.getElementById('totalOnlineCount');
+        const nearbyCount = document.getElementById('nearbyCount');
         const userContainer = document.getElementById('userContainer');
-        const userCount = document.getElementById('userCount');
         const radarBox = document.getElementById('radarBox');
 
         startAppBtn.addEventListener('click', () => {
@@ -360,6 +357,8 @@
             socket.onopen = () => {
                 sendLocation();
                 startPCMStreaming();
+                // Standort alle 3 Sekunden aktualisieren
+                gpsInterval = setInterval(sendLocation, 3000);
             };
 
             socket.onmessage = async (event) => {
@@ -367,6 +366,7 @@
                     try {
                         const data = JSON.parse(event.data);
                         if (data.type === 'radar_update') {
+                            totalOnlineCount.textContent = data.total_online;
                             updateRadarUI(data.nearby_users);
                         }
                     } catch (e) {
@@ -377,62 +377,81 @@
                 }
             };
 
-            socket.onerror = () => { statusText.textContent = "Fehler"; };
             socket.onclose = () => { if (isConnected) disconnect(); };
         }
 
         function sendLocation() {
             if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition((pos) => {
-                    const payload = {
-                        type: 'location',
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                        username: myUsername
-                    };
-                    if (socket && socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify(payload));
-                    }
-                }, null, { enableHighAccuracy: true });
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const payload = {
+                            type: 'location',
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            username: myUsername
+                        };
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify(payload));
+                        }
+                    },
+                    (err) => {
+                        console.warn("GPS-Fehler:", err.message);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
             }
         }
 
-        // 📡 Aktualisiert Radar-Punkte & Nutzerliste (500m Limit)
         function updateRadarUI(users) {
-            userCount.textContent = users.length;
+            nearbyCount.textContent = users.length;
             
-            // Alte Radar-Punkte entfernen
-            document.querySelectorAll('.radar-blip').forEach(el => el.remove());
+            // Alte Blips entfernen
+            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
             userContainer.innerHTML = '';
 
             if (users.length === 0) {
-                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine Personen in 500m</div>`;
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine Personen im 500m Umkreis</div>`;
                 return;
             }
 
-            const radarRadius = 120; // 240px breites Radar (Radius = 120px)
-            const maxDistance = 500; // 500 Meter entspricht dem Rand
+            const radarRadius = 130; // Radius des Radar-Kreises (260px / 2)
+            const maxDistance = 500; // 500 Meter entspricht dem Außenrand
 
             users.forEach(user => {
-                // 1. Eintrag in Liste
+                // 1. Eintrag in der Liste unter dem Radar
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `<span class="user-name">${user.username}</span><span class="user-dist">${user.distance}m</span>`;
                 userContainer.appendChild(item);
 
-                // 2. Punkt auf Radar platzieren
+                // 2. Punkt & Beschriftung direkt auf dem Radar zeichnen
+                const container = document.createElement('div');
+                container.className = 'radar-blip-container';
+
                 const blip = document.createElement('div');
                 blip.className = 'radar-blip';
 
-                // Umrechnung Meter -> Pixel auf Radarschirm
-                const pxX = (user.x / maxDistance) * radarRadius;
-                const pxY = (user.y / maxDistance) * radarRadius;
+                const label = document.createElement('div');
+                label.className = 'radar-blip-label';
+                label.textContent = `${user.username} (${user.distance}m)`;
 
-                // Position setzen (Zentrum ist 120, 120)
-                blip.style.left = `${120 + pxX}px`;
-                blip.style.top = `${120 - pxY}px`; // Invertiert, da Y auf Schirm nach unten wächst
+                container.appendChild(blip);
+                container.appendChild(label);
 
-                radarBox.appendChild(blip);
+                // Umrechnung Meter -> Radar PX
+                let pxX = (user.x / maxDistance) * radarRadius;
+                let pxY = (user.y / maxDistance) * radarRadius;
+
+                // Minimale Verschiebung bei 0m Distanz, damit der Punkt nicht exakt unter dem Mittelpunkt liegt
+                if (Math.abs(pxX) < 8 && Math.abs(pxY) < 8) {
+                    pxX = 12;
+                    pxY = 12;
+                }
+
+                container.style.left = `${130 + pxX}px`;
+                container.style.top = `${130 - pxY}px`;
+
+                radarBox.appendChild(container);
             });
         }
 
@@ -494,6 +513,7 @@
         }
 
         function disconnect() {
+            if (gpsInterval) clearInterval(gpsInterval);
             if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
             if (micSource) { micSource.disconnect(); micSource = null; }
             if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
@@ -501,12 +521,11 @@
 
             isConnected = false;
             talkBtn.classList.remove('active');
-            statusDot.className = "status-dot";
-            statusText.textContent = "Bereit";
             btnLabel.textContent = "VERBINDEN";
-            userCount.textContent = "0";
+            totalOnlineCount.textContent = "0";
+            nearbyCount.textContent = "0";
             userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
-            document.querySelectorAll('.radar-blip').forEach(el => el.remove());
+            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
         }
 
         talkBtn.addEventListener('click', async () => {
@@ -514,7 +533,6 @@
 
             if (!isConnected) {
                 try {
-                    statusText.textContent = "Verbinde...";
                     mediaStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { echoCancellation: true, noiseSuppression: true }, 
                         video: false 
@@ -523,16 +541,10 @@
                     connectToServer();
                     isConnected = true;
                     talkBtn.classList.add('active');
-                    statusDot.className = "status-dot active";
-                    statusText.textContent = "LIVE";
                     btnLabel.textContent = "TRENNEN";
-
-                    // Regelmäßiges Standort-Update für Bewegungsszenarien
-                    setInterval(sendLocation, 5000);
 
                 } catch (err) {
                     alert("Mikrofon/GPS Zugriff erforderlich.");
-                    statusText.textContent = "Fehler";
                 }
             } else {
                 disconnect();
