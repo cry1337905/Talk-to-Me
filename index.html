@@ -331,6 +331,7 @@
         let currentLng = 13.4050;
 
         let currentHeading = 0;
+        let smoothedHeading = 0; // Geglätteter Wert
         let lastUserList = [];
 
         const nameModal = document.getElementById('nameModal');
@@ -356,12 +357,10 @@
                 nameModal.style.display = 'none';
                 log("Name gesetzt: " + myUsername);
                 
-                // Sensor-Berechtigungen anfordern
                 await requestCompassPermission();
             }
         });
 
-        // --- KOMPASS FREIGABE & AUSLESEN ---
         async function requestCompassPermission() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
@@ -375,7 +374,6 @@
                     console.error("iOS Kompass-Fehler:", e);
                 }
             } else {
-                // Android & Standard Web
                 window.addEventListener('deviceorientationabsolute', handleOrientation, true);
                 window.addEventListener('deviceorientation', handleOrientation, true);
             }
@@ -385,18 +383,25 @@
             let heading = null;
 
             if (event.webkitCompassHeading) {
-                // iOS Safari
                 heading = event.webkitCompassHeading;
             } else if (event.alpha !== null) {
-                // Android / Chrome
                 heading = 360 - event.alpha;
             }
 
             if (heading !== null) {
-                currentHeading = (heading + 360) % 360;
+                heading = (heading + 360) % 360;
+
+                // TIEFPASSFILTER (Smoothing): Verhindert Sprünge
+                let diff = heading - smoothedHeading;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                
+                // 0.15 = Dämpfungsfaktor (kleiner = geschmeidiger)
+                smoothedHeading = (smoothedHeading + diff * 0.15 + 360) % 360; 
+
+                currentHeading = smoothedHeading;
                 compassHeadingVal.textContent = Math.round(currentHeading) + "°";
 
-                // Sofort neu zeichnen bei Drehung
                 if (lastUserList.length > 0) {
                     updateRadarUI(lastUserList);
                 }
@@ -509,6 +514,18 @@
             }
         }
 
+        // --- HAUPTKOORDINATEN- UND RADAR-LOGIK ---
+        function calculateRelativePosition(myLat, myLng, targetLat, targetLng) {
+            const R = 6371000; // Erdradius in Metern
+            const dLat = (targetLat - myLat) * Math.PI / 180;
+            const dLng = (targetLng - myLng) * Math.PI / 180;
+
+            const x = dLng * Math.cos((myLat + targetLat) / 2 * Math.PI / 180) * R; // Ost/West-Versatz (Meter)
+            const y = dLat * R; // Nord/Süd-Versatz (Meter)
+
+            return { x, y };
+        }
+
         function updateRadarUI(users) {
             if (!Array.isArray(users)) users = [];
             lastUserList = users;
@@ -524,38 +541,54 @@
                 return;
             }
 
-            const radarRadius = 130;
-            const maxDistance = 500;
+            const radarRadius = 130; // Pixel-Radius des Radars auf dem Bildschm
+            const maxDistance = 100; // Max Distanz für volle Radar-Reichweite (100 Meter)
 
-            // Umrechnung des Kompass-Winkels in Radiant
+            // Drehwinkel in Radiant umwandeln
             const rad = (currentHeading * Math.PI) / 180;
 
             otherUsers.forEach((user, index) => {
-                const username = user.username || user.name || user.id || "User";
-                const distance = Math.round(user.distance ?? user.dist ?? 0);
+                const username = user.username || user.name || "User";
+                
+                // Koordinaten extrahieren & in Numbers konvertieren
+                const targetLat = parseFloat(user.lat ?? user.latitude);
+                const targetLng = parseFloat(user.lng ?? user.longitude);
+
+                let relX = 0;
+                let relY = 0;
+
+                // Falls der Server bereits x/y sendet, nutzen wir das, ansonsten direkte GPS-Berechnung
+                if (user.x !== undefined && user.y !== undefined) {
+                    relX = parseFloat(user.x);
+                    relY = parseFloat(user.y);
+                } else if (!isNaN(targetLat) && !isNaN(targetLng)) {
+                    const pos = calculateRelativePosition(currentLat, currentLng, targetLat, targetLng);
+                    relX = pos.x;
+                    relY = pos.y;
+                }
+
+                // Gesamtdistanz
+                const distance = Math.round(user.distance ?? user.dist ?? Math.hypot(relX, relY));
 
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
                 userContainer.appendChild(item);
 
-                // Relativer Abstand in Metern (vom Server)
-                let relX = user.x ?? user.rel_x ?? 0;
-                let relY = user.y ?? user.rel_y ?? 0;
+                // TRIGO-ROTATION mit Richtungs-Korrektur
+                let rotatedX = relX * Math.cos(rad) - relY * Math.sin(rad);
+                let rotatedY = relX * Math.sin(rad) + relY * Math.cos(rad);
 
-                // ROTATION BERECHNEN:
-                // Da Y auf dem Bildschirm nach unten verläuft, wird -relY genutzt
-                let rotatedX = relX * Math.cos(rad) - (-relY) * Math.sin(rad);
-                let rotatedY = relX * Math.sin(rad) + (-relY) * Math.cos(rad);
-
+                // Pixel-Skalierung
                 let pxX = (rotatedX / maxDistance) * radarRadius;
-                let pxY = -(rotatedY / maxDistance) * radarRadius; // Y auf Bildschirm spiegeln
+                let pxY = -(rotatedY / maxDistance) * radarRadius; // Y-Achse invertieren für Display
 
-                // Überlappungs-Versatz für extrem nahe Punkte
-                if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
-                    const angle = ((index + 1) * 72) * (Math.PI / 180);
-                    pxX = Math.cos(angle) * 30;
-                    pxY = Math.sin(angle) * 30;
+                // Mindestabstand zur Mitte (Mitte = 0px Offset) & Begrenzung am Rand
+                const distFromCenter = Math.hypot(pxX, pxY);
+                if (distFromCenter > radarRadius - 10) {
+                    const factor = (radarRadius - 10) / distFromCenter;
+                    pxX *= factor;
+                    pxY *= factor;
                 }
 
                 const container = document.createElement('div');
@@ -571,7 +604,6 @@
                 container.appendChild(blip);
                 container.appendChild(label);
 
-                // 130px entspricht dem Radar-Mittelpunkt
                 container.style.left = `${130 + pxX}px`;
                 container.style.top = `${130 + pxY}px`;
 
