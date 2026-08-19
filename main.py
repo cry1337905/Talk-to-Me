@@ -15,7 +15,7 @@ app.add_middleware(
 )
 
 def haversine(lat1, lon1, lat2, lon2):
-    R = 6371000  # Erdradius in Metern
+    R = 6371000
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
     delta_phi = math.radians(lat2 - lat1)
@@ -42,11 +42,12 @@ class ConnectionManager:
         await websocket.accept()
         conn_info = {
             "ws": websocket,
-            "lat": 52.5200,  # Standard Fallback (Berlin)
+            "lat": 52.5200,
             "lng": 13.4050,
             "username": "Anonym"
         }
         self.active_connections.append(conn_info)
+        await self.broadcast_radar()
         return conn_info
 
     def disconnect(self, conn_info: dict):
@@ -54,10 +55,13 @@ class ConnectionManager:
             self.active_connections.remove(conn_info)
 
     def update_info(self, conn_info: dict, lat: float, lng: float, username: str):
-        conn_info["lat"] = lat
-        conn_info["lng"] = lng
-        if username:
-            conn_info["username"] = username
+        try:
+            conn_info["lat"] = float(lat)
+            conn_info["lng"] = float(lng)
+            if username:
+                conn_info["username"] = str(username)
+        except (ValueError, TypeError):
+            pass
 
     async def broadcast_radar(self):
         total_online = len(self.active_connections)
@@ -106,7 +110,7 @@ manager = ConnectionManager()
 
 async def radar_loop():
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         await manager.broadcast_radar()
 
 @app.on_event("startup")
@@ -120,17 +124,24 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             message = await websocket.receive()
             if "text" in message:
-                data = json.loads(message["text"])
-                if data.get("type") == "location":
-                    manager.update_info(
-                        conn_info, 
-                        data["lat"], 
-                        data["lng"], 
-                        data.get("username", "Anonym")
-                    )
+                try:
+                    data = json.loads(message["text"])
+                    if data.get("type") == "location":
+                        manager.update_info(
+                            conn_info, 
+                            data["lat"], 
+                            data["lng"], 
+                            data.get("username", "Anonym")
+                        )
+                        # Nach Update direkt ein Radar-Signal erzwingen
+                        await manager.broadcast_radar()
+                except Exception:
+                    pass
             elif "bytes" in message:
                 await manager.broadcast_audio(conn_info, message["bytes"])
     except WebSocketDisconnect:
         manager.disconnect(conn_info)
+        await manager.broadcast_radar()
     except Exception:
         manager.disconnect(conn_info)
+        await manager.broadcast_radar()

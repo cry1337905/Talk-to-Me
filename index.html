@@ -185,7 +185,6 @@
             flex-direction: column;
             align-items: center;
             pointer-events: none;
-            transition: all 0.5s ease;
         }
 
         .radar-blip {
@@ -285,7 +284,7 @@
             <div class="stat-badge">Server: <span id="totalOnlineCount">0</span> Online</div>
             <div class="stat-badge">Umkreis (500m): <span id="nearbyCount">0</span></div>
         </div>
-        <div class="gps-status" id="gpsStatus">GPS Status: Prüfe...</div>
+        <div class="gps-status" id="gpsStatus">GPS Status: Bereit...</div>
     </header>
 
     <div class="radar-box" id="radarBox">
@@ -322,7 +321,7 @@
         let mediaStream = null;
         let micSource = null;
         let nextPlayTime = 0;
-        let gpsInterval = null;
+        let watchId = null;
 
         const nameModal = document.getElementById('nameModal');
         const usernameInput = document.getElementById('usernameInput');
@@ -363,21 +362,20 @@
             socket.binaryType = "arraybuffer";
 
             socket.onopen = () => {
-                sendLocation();
+                startGPSWatch();
                 startPCMStreaming();
-                gpsInterval = setInterval(sendLocation, 3000);
             };
 
-            socket.onmessage = async (event) => {
+            socket.onmessage = (event) => {
                 if (typeof event.data === "string") {
                     try {
                         const data = JSON.parse(event.data);
                         if (data.type === 'radar_update') {
-                            totalOnlineCount.textContent = data.total_online;
-                            updateRadarUI(data.nearby_users);
+                            totalOnlineCount.textContent = String(data.total_online || 0);
+                            updateRadarUI(data.nearby_users || []);
                         }
                     } catch (e) {
-                        console.error("JSON Fehler:", e);
+                        console.error("Fehler beim Empfang:", e);
                     }
                 } else if (event.data instanceof ArrayBuffer) {
                     playIncomingPCM(event.data);
@@ -387,21 +385,20 @@
             socket.onclose = () => { if (isConnected) disconnect(); };
         }
 
-        function sendLocation() {
+        function startGPSWatch() {
             if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
+                watchId = navigator.geolocation.watchPosition(
                     (pos) => {
                         gpsStatus.textContent = "GPS Status: Aktiv (Echtzeit)";
                         gpsStatus.style.color = "#10b981";
                         dispatchLocation(pos.coords.latitude, pos.coords.longitude);
                     },
                     (err) => {
-                        gpsStatus.textContent = "GPS verweigert/Fehler! Nutze Simulations-Modus.";
+                        gpsStatus.textContent = "GPS eingeschränkt! Nutze Simulations-Modus.";
                         gpsStatus.style.color = "#ef4444";
-                        // Fallback: Simulierte Basis-Koordinaten nutzen
                         dispatchLocation(52.5200, 13.4050);
                     },
-                    { enableHighAccuracy: false, timeout: 4000, maximumAge: 10000 }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             } else {
                 dispatchLocation(52.5200, 13.4050);
@@ -409,19 +406,19 @@
         }
 
         function dispatchLocation(lat, lng) {
-            const payload = {
-                type: 'location',
-                lat: lat,
-                lng: lng,
-                username: myUsername
-            };
             if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify(payload));
+                const payload = JSON.stringify({
+                    type: 'location',
+                    lat: lat,
+                    lng: lng,
+                    username: myUsername
+                });
+                socket.send(payload);
             }
         }
 
         function updateRadarUI(users) {
-            nearbyCount.textContent = users.length;
+            nearbyCount.textContent = String(users.length);
             
             document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
             userContainer.innerHTML = '';
@@ -435,13 +432,11 @@
             const maxDistance = 500;
 
             users.forEach((user, index) => {
-                // Eintrag in Liste
                 const item = document.createElement('div');
                 item.className = 'user-item';
                 item.innerHTML = `<span class="user-name">${user.username}</span><span class="user-dist">${user.distance}m</span>`;
                 userContainer.appendChild(item);
 
-                // Punkt auf Radar
                 const container = document.createElement('div');
                 container.className = 'radar-blip-container';
 
@@ -458,12 +453,11 @@
                 let pxX = (user.x / maxDistance) * radarRadius;
                 let pxY = (user.y / maxDistance) * radarRadius;
 
-                // Falls 2 Geräte exakt die gleichen Koordinaten liefern (z.B. Test im selben Raum / Fallback),
-                // verschieben wir sie leicht virtuell, damit man sie nebeneinander auf dem Radar sieht!
-                if (Math.abs(pxX) < 10 && Math.abs(pxY) < 10) {
-                    const angle = (index * 60) * (Math.PI / 180);
-                    pxX = Math.cos(angle) * 45;
-                    pxY = Math.sin(angle) * 45;
+                // Falls Distanz nahe 0 ist (beide Handys am selben Ort), Punkte auffächern
+                if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
+                    const angle = ((index + 1) * 72) * (Math.PI / 180);
+                    pxX = Math.cos(angle) * 40;
+                    pxY = Math.sin(angle) * 40;
                 }
 
                 container.style.left = `${130 + pxX}px`;
@@ -526,12 +520,12 @@
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration;
             } catch (e) {
-                console.error("Playback error:", e);
+                console.error("Audiofehler:", e);
             }
         }
 
         function disconnect() {
-            if (gpsInterval) clearInterval(gpsInterval);
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
             if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
             if (micSource) { micSource.disconnect(); micSource = null; }
             if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
