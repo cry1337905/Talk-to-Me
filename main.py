@@ -4,6 +4,10 @@ import math
 
 app = FastAPI()
 
+@app.get("/test")
+def test_version():
+    return {"status": "NEUER_CODE_IST_LIVE_V2"}
+
 class ConnectionManager:
     def __init__(self):
         # Nutzt das WebSocket-Objekt direkt als eindeutigen Key
