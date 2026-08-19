@@ -1,715 +1,389 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Talk to Me - Radar</title>
-    <style>
-        :root {
-            --bg-color: #0b0f17;
-            --card-bg: rgba(22, 30, 46, 0.75);
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --accent-cyan: #06b6d4;
-            --active-red: #ef4444;
-            --active-glow: rgba(239, 68, 68, 0.5);
-            --status-green: #10b981;
+<script>
+    const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
+
+    let myClientId = "user_" + Math.random().toString(36).substring(2, 9);
+    let myUsername = "Anonym_" + Math.floor(Math.random() * 899 + 100);
+
+    let isConnected = false;
+    let socket = null;
+    let audioContext = null;
+    let audioProcessor = null;
+    let mediaStream = null;
+    let micSource = null;
+    let nextPlayTime = 0;
+    let watchId = null;
+    let heartbeatInterval = null;
+
+    let currentLat = 52.5200;
+    let currentLng = 13.4050;
+
+    let currentHeading = 0;
+    let smoothedHeading = 0;
+    let lastUserList = [];
+
+    const nameModal = document.getElementById('nameModal');
+    const usernameInput = document.getElementById('usernameInput');
+    const startAppBtn = document.getElementById('startAppBtn');
+    const talkBtn = document.getElementById('talkBtn');
+    const btnLabel = document.getElementById('btnLabel');
+    const totalOnlineCount = document.getElementById('totalOnlineCount');
+    const nearbyCount = document.getElementById('nearbyCount');
+    const userContainer = document.getElementById('userContainer');
+    const radarBox = document.getElementById('radarBox');
+    const gpsStatus = document.getElementById('gpsStatus');
+    const compassHeadingVal = document.getElementById('compassHeadingVal');
+
+    function log(msg) {
+        console.log(msg);
+    }
+
+    startAppBtn.addEventListener('click', async () => {
+        const name = usernameInput.value.trim();
+        if (name.length > 0) {
+            myUsername = name;
+            nameModal.style.display = 'none';
+            await requestCompassPermission();
         }
+    });
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 16px;
-            overflow-x: hidden;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(11, 15, 23, 0.95);
-            backdrop-filter: blur(10px);
-            z-index: 100;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .modal-card {
-            background: var(--card-bg);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            padding: 24px;
-            width: 100%;
-            max-width: 340px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        .modal-card h2 { font-size: 1.3rem; margin-bottom: 8px; }
-        .modal-card p { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px; }
-
-        .modal-card input {
-            width: 100%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            background: rgba(0, 0, 0, 0.4);
-            color: #fff;
-            font-size: 1rem;
-            outline: none;
-            margin-bottom: 16px;
-            text-align: center;
-            user-select: text;
-            -webkit-user-select: text;
-        }
-
-        .modal-card button {
-            width: 100%;
-            padding: 12px;
-            border-radius: 12px;
-            border: none;
-            background: var(--accent-cyan);
-            color: #000;
-            font-weight: 700;
-            font-size: 0.95rem;
-            cursor: pointer;
-        }
-
-        header {
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            margin-bottom: 8px;
-        }
-
-        h1 {
-            font-size: 1.4rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #fff 30%, var(--accent-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .stats-bar {
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-            margin-top: 8px;
-            flex-wrap: wrap;
-        }
-
-        .stat-badge {
-            background: var(--card-bg);
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .stat-badge span { color: var(--accent-cyan); font-weight: 700; }
-
-        .gps-status {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-
-        .radar-box {
-            position: relative;
-            width: 260px;
-            height: 260px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(6, 182, 212, 0.08) 0%, rgba(11, 15, 23, 0.9) 100%);
-            border: 1px solid rgba(6, 182, 212, 0.4);
-            margin: 12px 0;
-            overflow: hidden;
-            box-shadow: 0 0 25px rgba(6, 182, 212, 0.2);
-        }
-
-        .radar-ring {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            border-radius: 50%;
-            border: 1px dashed rgba(6, 182, 212, 0.25);
-        }
-        .radar-ring.r1 { width: 33%; height: 33%; }
-        .radar-ring.r2 { width: 66%; height: 66%; }
-        .radar-ring.r3 { width: 100%; height: 100%; }
-
-        .radar-sweep {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.35) 0deg, transparent 60deg);
-            animation: sweep 4s linear infinite;
-        }
-
-        @keyframes sweep {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .radar-center-dot {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 8px; height: 8px;
-            background: #fff;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px #fff;
-            z-index: 2;
-        }
-
-        .radar-blip-container {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            pointer-events: none;
-        }
-
-        .radar-blip {
-            width: 12px;
-            height: 12px;
-            background-color: #00ffff;
-            border-radius: 50%;
-            box-shadow: 0 0 12px #00ffff;
-        }
-
-        .radar-blip-label {
-            background: rgba(0, 0, 0, 0.85);
-            border: 1px solid var(--accent-cyan);
-            color: #fff;
-            font-size: 0.65rem;
-            padding: 2px 6px;
-            border-radius: 6px;
-            margin-top: 2px;
-            white-space: nowrap;
-            font-weight: 600;
-        }
-
-        .users-list {
-            width: 100%;
-            max-width: 320px;
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 12px;
-            margin-bottom: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            max-height: 110px;
-            overflow-y: auto;
-        }
-
-        .users-list h3 {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 6px;
-        }
-
-        .user-item {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.85rem;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        }
-
-        .user-item:last-child { border-bottom: none; }
-        .user-name { font-weight: 600; color: var(--text-primary); }
-        .user-dist { color: var(--accent-cyan); font-weight: 700; }
-
-        .talk-btn {
-            width: 110px;
-            height: 110px;
-            border-radius: 50%;
-            border: none;
-            background: linear-gradient(145deg, #131b2e, #0b101d);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-            color: var(--text-primary);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            z-index: 2;
-            transition: all 0.3s ease;
-            -webkit-tap-highlight-color: transparent;
-            margin-bottom: 12px;
-        }
-
-        .talk-btn svg { width: 32px; height: 32px; fill: var(--text-secondary); }
-        .talk-btn span { font-size: 0.7rem; margin-top: 4px; font-weight: 700; color: var(--text-secondary); }
-
-        .talk-btn.active {
-            background: linear-gradient(145deg, #1f1015, #2b090a);
-            box-shadow: 0 0 25px var(--active-glow);
-        }
-        .talk-btn.active svg, .talk-btn.active span { fill: var(--active-red); color: var(--active-red); }
-    </style>
-</head>
-<body>
-
-    <div class="modal-overlay" id="nameModal">
-        <div class="modal-card">
-            <h2>Willkommen!</h2>
-            <p>Gib deinen Namen ein, um auf dem Radar zu erscheinen.</p>
-            <input type="text" id="usernameInput" placeholder="Dein Name..." maxlength="15">
-            <button id="startAppBtn">STARTEN</button>
-        </div>
-    </div>
-
-    <header>
-        <h1>TALK TO ME</h1>
-        <div class="stats-bar">
-            <div class="stat-badge">Online: <span id="totalOnlineCount">0</span></div>
-            <div class="stat-badge">Umkreis: <span id="nearbyCount">0</span></div>
-            <div class="stat-badge">Kompass: <span id="compassHeadingVal">Inaktiv</span></div>
-        </div>
-        <div class="gps-status" id="gpsStatus">GPS Status: Bereit...</div>
-    </header>
-
-    <div class="radar-box" id="radarBox">
-        <div class="radar-ring r1"></div>
-        <div class="radar-ring r2"></div>
-        <div class="radar-ring r3"></div>
-        <div class="radar-sweep"></div>
-        <div class="radar-center-dot"></div>
-    </div>
-
-    <div class="users-list">
-        <h3>Teilnehmer in der Nähe</h3>
-        <div id="userContainer">
-            <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Nicht verbunden. Drücke VERBINDEN.</div>
-        </div>
-    </div>
-
-    <button class="talk-btn" id="talkBtn">
-        <svg viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-        </svg>
-        <span id="btnLabel">VERBINDEN</span>
-    </button>
-
-    <script>
-        const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
-
-        let myClientId = "user_" + Math.random().toString(36).substring(2, 9);
-        let myUsername = "Anonym_" + Math.floor(Math.random() * 899 + 100);
-
-        let isConnected = false;
-        let socket = null;
-        let audioContext = null;
-        let audioProcessor = null;
-        let mediaStream = null;
-        let micSource = null;
-        let nextPlayTime = 0;
-        let watchId = null;
-        let heartbeatInterval = null;
-
-        let currentLat = 52.5200;
-        let currentLng = 13.4050;
-
-        let currentHeading = 0;
-        let smoothedHeading = 0; // Geglätteter Wert
-        let lastUserList = [];
-
-        const nameModal = document.getElementById('nameModal');
-        const usernameInput = document.getElementById('usernameInput');
-        const startAppBtn = document.getElementById('startAppBtn');
-        const talkBtn = document.getElementById('talkBtn');
-        const btnLabel = document.getElementById('btnLabel');
-        const totalOnlineCount = document.getElementById('totalOnlineCount');
-        const nearbyCount = document.getElementById('nearbyCount');
-        const userContainer = document.getElementById('userContainer');
-        const radarBox = document.getElementById('radarBox');
-        const gpsStatus = document.getElementById('gpsStatus');
-        const compassHeadingVal = document.getElementById('compassHeadingVal');
-
-        function log(msg) {
-            console.log(msg);
-        }
-
-        startAppBtn.addEventListener('click', async () => {
-            const name = usernameInput.value.trim();
-            if (name.length > 0) {
-                myUsername = name;
-                nameModal.style.display = 'none';
-                log("Name gesetzt: " + myUsername);
-                
-                await requestCompassPermission();
-            }
-        });
-
-        async function requestCompassPermission() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation, true);
-                    } else {
-                        compassHeadingVal.textContent = "Gesperrt";
-                    }
-                } catch (e) {
-                    console.error("iOS Kompass-Fehler:", e);
-                }
-            } else {
-                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-                window.addEventListener('deviceorientation', handleOrientation, true);
-            }
-        }
-
-        function handleOrientation(event) {
-            let heading = null;
-
-            if (event.webkitCompassHeading) {
-                heading = event.webkitCompassHeading;
-            } else if (event.alpha !== null) {
-                heading = 360 - event.alpha;
-            }
-
-            if (heading !== null) {
-                heading = (heading + 360) % 360;
-
-                // TIEFPASSFILTER (Smoothing): Verhindert Sprünge
-                let diff = heading - smoothedHeading;
-                if (diff > 180) diff -= 360;
-                if (diff < -180) diff += 360;
-                
-                // 0.15 = Dämpfungsfaktor (kleiner = geschmeidiger)
-                smoothedHeading = (smoothedHeading + diff * 0.15 + 360) % 360; 
-
-                currentHeading = smoothedHeading;
-                compassHeadingVal.textContent = Math.round(currentHeading) + "°";
-
-                if (lastUserList.length > 0) {
-                    updateRadarUI(lastUserList);
-                }
-            }
-        }
-
-        async function initAndUnlockAudio() {
-            if (!audioContext) {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                audioContext = new AudioCtx();
-            }
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
-            const buffer = audioContext.createBuffer(1, 1, 22050);
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.start(0);
-        }
-
-        function connectToServer() {
-            log("Verbinde mit Server...");
-            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Server...</div>`;
-
+    async function requestCompassPermission() {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             try {
-                socket = new WebSocket(RENDER_WEBSOCKET_URL);
-                socket.binaryType = "arraybuffer";
-
-                socket.onopen = () => {
-                    log("WebSocket Verbunden!");
-                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Sende Position...</div>`;
-                    
-                    dispatchLocation(currentLat, currentLng);
-                    
-                    heartbeatInterval = setInterval(() => {
-                        dispatchLocation(currentLat, currentLng);
-                    }, 2000);
-
-                    startGPSWatch();
-                    startPCMStreaming();
-                };
-
-                socket.onmessage = (event) => {
-                    if (typeof event.data === "string") {
-                        try {
-                            const data = JSON.parse(event.data);
-
-                            const onlineTotal = data.total_online ?? data.online_count ?? data.total ?? data.online ?? 1;
-                            totalOnlineCount.textContent = String(onlineTotal);
-
-                            const userList = data.nearby_users || data.users || data.clients || data.list || [];
-                            updateRadarUI(userList);
-                        } catch (e) {
-                            log("JSON Parse-Fehler: " + e.message);
-                        }
-                    } else if (event.data instanceof ArrayBuffer) {
-                        playIncomingPCM(event.data);
-                    }
-                };
-
-                socket.onerror = (err) => {
-                    log("WS-Fehler aufgetreten!");
-                };
-
-                socket.onclose = () => {
-                    log("WS-Verbindung geschlossen.");
-                    if (isConnected) disconnect();
-                };
-            } catch (err) {
-                log("Verbindungs-Fehler: " + err.message);
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation, true);
+                } else {
+                    compassHeadingVal.textContent = "Gesperrt";
+                }
+            } catch (e) {
+                console.error("iOS Kompass-Fehler:", e);
             }
+        } else {
+            window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+            window.addEventListener('deviceorientation', handleOrientation, true);
+        }
+    }
+
+    function handleOrientation(event) {
+        let heading = null;
+
+        if (event.webkitCompassHeading) {
+            heading = event.webkitCompassHeading; // iOS gibt echten Norden (0-360 deg)
+        } else if (event.alpha !== null) {
+            heading = 360 - event.alpha; // Android Fallback
         }
 
-        function startGPSWatch() {
-            if ("geolocation" in navigator) {
-                watchId = navigator.geolocation.watchPosition(
-                    (pos) => {
-                        gpsStatus.textContent = "GPS Status: Aktiv (Echtzeit)";
-                        gpsStatus.style.color = "#10b981";
-                        currentLat = pos.coords.latitude;
-                        currentLng = pos.coords.longitude;
-                        dispatchLocation(currentLat, currentLng);
-                    },
-                    (err) => {
-                        gpsStatus.textContent = "GPS eingeschränkt. Standardort genutzt.";
-                        gpsStatus.style.color = "#ef4444";
-                        dispatchLocation(currentLat, currentLng);
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+        if (heading !== null) {
+            heading = (heading + 360) % 360;
+
+            // Tiefpassfilter gegen Rauschen
+            let diff = heading - smoothedHeading;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            
+            smoothedHeading = (smoothedHeading + diff * 0.2 + 360) % 360;
+            currentHeading = smoothedHeading;
+            compassHeadingVal.textContent = Math.round(currentHeading) + "°";
+
+            if (lastUserList.length > 0) {
+                updateRadarUI(lastUserList);
             }
         }
+    }
 
-        function dispatchLocation(lat, lng) {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                const payload = JSON.stringify({
-                    type: 'location',
-                    action: 'location',
-                    id: myClientId,
-                    client_id: myClientId,
-                    lat: parseFloat(lat),
-                    latitude: parseFloat(lat),
-                    lng: parseFloat(lng),
-                    longitude: parseFloat(lng),
-                    username: myUsername,
-                    name: myUsername
-                });
-                socket.send(payload);
-            }
+    async function initAndUnlockAudio() {
+        if (!audioContext) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioCtx();
         }
-
-        // --- HAUPTKOORDINATEN- UND RADAR-LOGIK ---
-        function calculateRelativePosition(myLat, myLng, targetLat, targetLng) {
-            const R = 6371000; // Erdradius in Metern
-            const dLat = (targetLat - myLat) * Math.PI / 180;
-            const dLng = (targetLng - myLng) * Math.PI / 180;
-
-            const x = dLng * Math.cos((myLat + targetLat) / 2 * Math.PI / 180) * R; // Ost/West-Versatz (Meter)
-            const y = dLat * R; // Nord/Süd-Versatz (Meter)
-
-            return { x, y };
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
         }
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+    }
 
-        function updateRadarUI(users) {
-            if (!Array.isArray(users)) users = [];
-            lastUserList = users;
+    function connectToServer() {
+        userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Server...</div>`;
 
-            const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
+        try {
+            socket = new WebSocket(RENDER_WEBSOCKET_URL);
+            socket.binaryType = "arraybuffer";
 
-            nearbyCount.textContent = String(otherUsers.length);
-            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
-            userContainer.innerHTML = '';
-
-            if (otherUsers.length === 0) {
-                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in 500m Umkreis.</div>`;
-                return;
-            }
-
-            const radarRadius = 130; // Pixel-Radius des Radars auf dem Bildschm
-            const maxDistance = 100; // Max Distanz für volle Radar-Reichweite (100 Meter)
-
-            // Drehwinkel in Radiant umwandeln
-            const rad = (currentHeading * Math.PI) / 180;
-
-            otherUsers.forEach((user, index) => {
-                const username = user.username || user.name || "User";
+            socket.onopen = () => {
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Sende Position...</div>`;
                 
-                // Koordinaten extrahieren & in Numbers konvertieren
-                const targetLat = parseFloat(user.lat ?? user.latitude);
-                const targetLng = parseFloat(user.lng ?? user.longitude);
+                dispatchLocation(currentLat, currentLng);
+                
+                heartbeatInterval = setInterval(() => {
+                    dispatchLocation(currentLat, currentLng);
+                }, 2000);
 
-                let relX = 0;
-                let relY = 0;
-
-                // Falls der Server bereits x/y sendet, nutzen wir das, ansonsten direkte GPS-Berechnung
-                if (user.x !== undefined && user.y !== undefined) {
-                    relX = parseFloat(user.x);
-                    relY = parseFloat(user.y);
-                } else if (!isNaN(targetLat) && !isNaN(targetLng)) {
-                    const pos = calculateRelativePosition(currentLat, currentLng, targetLat, targetLng);
-                    relX = pos.x;
-                    relY = pos.y;
-                }
-
-                // Gesamtdistanz
-                const distance = Math.round(user.distance ?? user.dist ?? Math.hypot(relX, relY));
-
-                const item = document.createElement('div');
-                item.className = 'user-item';
-                item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
-                userContainer.appendChild(item);
-
-                // TRIGO-ROTATION mit Richtungs-Korrektur
-                let rotatedX = relX * Math.cos(rad) - relY * Math.sin(rad);
-                let rotatedY = relX * Math.sin(rad) + relY * Math.cos(rad);
-
-                // Pixel-Skalierung
-                let pxX = (rotatedX / maxDistance) * radarRadius;
-                let pxY = -(rotatedY / maxDistance) * radarRadius; // Y-Achse invertieren für Display
-
-                // Mindestabstand zur Mitte (Mitte = 0px Offset) & Begrenzung am Rand
-                const distFromCenter = Math.hypot(pxX, pxY);
-                if (distFromCenter > radarRadius - 10) {
-                    const factor = (radarRadius - 10) / distFromCenter;
-                    pxX *= factor;
-                    pxY *= factor;
-                }
-
-                const container = document.createElement('div');
-                container.className = 'radar-blip-container';
-
-                const blip = document.createElement('div');
-                blip.className = 'radar-blip';
-
-                const label = document.createElement('div');
-                label.className = 'radar-blip-label';
-                label.textContent = `${username} (${distance}m)`;
-
-                container.appendChild(blip);
-                container.appendChild(label);
-
-                container.style.left = `${130 + pxX}px`;
-                container.style.top = `${130 + pxY}px`;
-
-                radarBox.appendChild(container);
-            });
-        }
-
-        function startPCMStreaming() {
-            if (!mediaStream || !audioContext) return;
-            micSource = audioContext.createMediaStreamSource(mediaStream);
-            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-
-            audioProcessor.onaudioprocess = (e) => {
-                if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
-                const inputData = e.inputBuffer.getChannelData(0);
-                const pcm16 = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    let s = Math.max(-1, Math.min(1, inputData[i]));
-                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                }
-                const packet = new ArrayBuffer(4 + pcm16.length * 2);
-                const view = new DataView(packet);
-                view.setUint32(0, audioContext.sampleRate, true);
-                new Int16Array(packet, 4).set(pcm16);
-                socket.send(packet);
+                startGPSWatch();
+                startPCMStreaming();
             };
 
-            micSource.connect(audioProcessor);
-            const dummyGain = audioContext.createGain();
-            dummyGain.gain.value = 0;
-            audioProcessor.connect(dummyGain);
-            dummyGain.connect(audioContext.destination);
-        }
+            socket.onmessage = (event) => {
+                if (typeof event.data === "string") {
+                    try {
+                        const data = JSON.parse(event.data);
+                        const onlineTotal = data.total_online ?? data.online_count ?? data.total ?? data.online ?? 1;
+                        totalOnlineCount.textContent = String(onlineTotal);
 
-        async function playIncomingPCM(arrayBuffer) {
-            if (!audioContext) return;
-            if (audioContext.state === 'suspended') await audioContext.resume();
-
-            try {
-                const view = new DataView(arrayBuffer);
-                const remoteSampleRate = view.getUint32(0, true);
-                const int16 = new Int16Array(arrayBuffer, 4);
-
-                const float32 = new Float32Array(int16.length);
-                for (let i = 0; i < int16.length; i++) {
-                    float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+                        const userList = data.nearby_users || data.users || data.clients || data.list || [];
+                        updateRadarUI(userList);
+                    } catch (e) {
+                        log("JSON Parse-Fehler: " + e.message);
+                    }
+                } else if (event.data instanceof ArrayBuffer) {
+                    playIncomingPCM(event.data);
                 }
+            };
 
-                const audioBuffer = audioContext.createBuffer(1, float32.length, remoteSampleRate);
-                audioBuffer.getChannelData(0).set(float32);
+            socket.onerror = () => log("WS-Fehler aufgetreten!");
+            socket.onclose = () => { if (isConnected) disconnect(); };
+        } catch (err) {
+            log("Verbindungs-Fehler: " + err.message);
+        }
+    }
 
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
+    function startGPSWatch() {
+        if ("geolocation" in navigator) {
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    gpsStatus.textContent = "GPS Status: Aktiv (±" + Math.round(pos.coords.accuracy) + "m)";
+                    gpsStatus.style.color = "#10b981";
+                    currentLat = pos.coords.latitude;
+                    currentLng = pos.coords.longitude;
+                    dispatchLocation(currentLat, currentLng);
+                },
+                () => {
+                    gpsStatus.textContent = "GPS eingeschränkt. Standardort genutzt.";
+                    gpsStatus.style.color = "#ef4444";
+                    dispatchLocation(currentLat, currentLng);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+    }
 
-                const currentTime = audioContext.currentTime;
-                if (nextPlayTime < currentTime) nextPlayTime = currentTime;
-                source.start(nextPlayTime);
-                nextPlayTime += audioBuffer.duration;
-            } catch (e) {
-                console.error("Audiofehler:", e);
-            }
+    function dispatchLocation(lat, lng) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            const payload = JSON.stringify({
+                type: 'location',
+                action: 'location',
+                id: myClientId,
+                client_id: myClientId,
+                lat: parseFloat(lat),
+                latitude: parseFloat(lat),
+                lng: parseFloat(lng),
+                longitude: parseFloat(lng),
+                username: myUsername,
+                name: myUsername
+            });
+            socket.send(payload);
+        }
+    }
+
+    // Mathematische Peilung (Bearing) in Grad (0° = Nord, 90° = Ost)
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        const θ = Math.atan2(y, x);
+
+        return (θ * 180 / Math.PI + 360) % 360;
+    }
+
+    // Haversine-Formel für exakte GPS-Distanz in Metern
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    function updateRadarUI(users) {
+        if (!Array.isArray(users)) users = [];
+        lastUserList = users;
+
+        const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
+
+        nearbyCount.textContent = String(otherUsers.length);
+        document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
+        userContainer.innerHTML = '';
+
+        if (otherUsers.length === 0) {
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in der Nähe.</div>`;
+            return;
         }
 
-        function disconnect() {
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-            if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
-            if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
-            if (micSource) { micSource.disconnect(); micSource = null; }
-            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-            if (socket) socket.close();
+        const radarRadiusPx = 130; // Pixel-Radius des Radars
+        const maxDisplayDistance = 50; // In Metern (50m entspricht dem äußeren Radarring)
 
-            isConnected = false;
-            talkBtn.classList.remove('active');
-            btnLabel.textContent = "VERBINDEN";
-            totalOnlineCount.textContent = "0";
-            nearbyCount.textContent = "0";
-            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
-            document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
-            log("Verbindung getrennt.");
-        }
+        otherUsers.forEach((user) => {
+            const username = user.username || user.name || "User";
+            
+            let targetLat = parseFloat(user.lat ?? user.latitude);
+            let targetLng = parseFloat(user.lng ?? user.longitude);
 
-        talkBtn.addEventListener('click', async () => {
-            await initAndUnlockAudio();
+            let distance = calculateDistance(currentLat, currentLng, targetLat, targetLng);
+            let bearing = calculateBearing(currentLat, currentLng, targetLat, targetLng);
 
-            if (!isConnected) {
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true }, 
-                        video: false 
-                    });
-
-                    isConnected = true;
-                    talkBtn.classList.add('active');
-                    btnLabel.textContent = "TRENNEN";
-
-                    connectToServer();
-
-                } catch (err) {
-                    alert("Mikrofon-Zugriff erforderlich.");
-                    log("Mikrofon-Zugriff verweigert.");
-                }
-            } else {
-                disconnect();
+            // FALLBACK BEI GPS-UNGENAUIGKEIT (< 2 Meter Differenz):
+            // Falls beide Handys fast am selben Ort gemeldet werden, setzen wir versuchsweise 10m Abstand in Nord-Richtung,
+            // damit du sehen kannst, ob die Radar-Drehung mit dem Kompass funktioniert.
+            if (distance < 2 || isNaN(distance)) {
+                distance = 10;
+                bearing = 0; // Nord
             }
+
+            const item = document.createElement('div');
+            item.className = 'user-item';
+            item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${Math.round(distance)}m</span>`;
+            userContainer.appendChild(item);
+
+            // RELATIVER WINKEL:
+            // Bearing minus Kompassausrichtung -> 0° bedeutet "Geradeaus vor dir"
+            let relativeAngle = (bearing - currentHeading + 360) % 360;
+
+            // In Radiant für JS Math
+            let rad = (relativeAngle * Math.PI) / 180;
+
+            // Skalierung auf Pixel-Radius
+            let scaledDistance = Math.min(distance, maxDisplayDistance) / maxDisplayDistance * (radarRadiusPx - 15);
+
+            // Polar-zu-Kartesisch Konvertierung:
+            // 0° (Vorne) -> x = 0, y = -distance
+            let pxX = scaledDistance * Math.sin(rad);
+            let pxY = -scaledDistance * Math.cos(rad);
+
+            const container = document.createElement('div');
+            container.className = 'radar-blip-container';
+
+            const blip = document.createElement('div');
+            blip.className = 'radar-blip';
+
+            const label = document.createElement('div');
+            label.className = 'radar-blip-label';
+            label.textContent = `${username} (${Math.round(distance)}m)`;
+
+            container.appendChild(blip);
+            container.appendChild(label);
+
+            // Platzierung von der Mitte aus (130px, 130px)
+            container.style.left = `${radarRadiusPx + pxX}px`;
+            container.style.top = `${radarRadiusPx + pxY}px`;
+
+            radarBox.appendChild(container);
         });
-    </script>
-</body>
-</html>
+    }
+
+    function startPCMStreaming() {
+        if (!mediaStream || !audioContext) return;
+        micSource = audioContext.createMediaStreamSource(mediaStream);
+        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        audioProcessor.onaudioprocess = (e) => {
+            if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            const pcm16 = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) {
+                let s = Math.max(-1, Math.min(1, inputData[i]));
+                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            const packet = new ArrayBuffer(4 + pcm16.length * 2);
+            const view = new DataView(packet);
+            view.setUint32(0, audioContext.sampleRate, true);
+            new Int16Array(packet, 4).set(pcm16);
+            socket.send(packet);
+        };
+
+        micSource.connect(audioProcessor);
+        const dummyGain = audioContext.createGain();
+        dummyGain.gain.value = 0;
+        audioProcessor.connect(dummyGain);
+        dummyGain.connect(audioContext.destination);
+    }
+
+    async function playIncomingPCM(arrayBuffer) {
+        if (!audioContext) return;
+        if (audioContext.state === 'suspended') await audioContext.resume();
+
+        try {
+            const view = new DataView(arrayBuffer);
+            const remoteSampleRate = view.getUint32(0, true);
+            const int16 = new Int16Array(arrayBuffer, 4);
+
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7FFF);
+            }
+
+            const audioBuffer = audioContext.createBuffer(1, float32.length, remoteSampleRate);
+            audioBuffer.getChannelData(0).set(float32);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+
+            const currentTime = audioContext.currentTime;
+            if (nextPlayTime < currentTime) nextPlayTime = currentTime;
+            source.start(nextPlayTime);
+            nextPlayTime += audioBuffer.duration;
+        } catch (e) {
+            console.error("Audiofehler:", e);
+        }
+    }
+
+    function disconnect() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
+        if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
+        if (micSource) { micSource.disconnect(); micSource = null; }
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        if (socket) socket.close();
+
+        isConnected = false;
+        talkBtn.classList.remove('active');
+        btnLabel.textContent = "VERBINDEN";
+        totalOnlineCount.textContent = "0";
+        nearbyCount.textContent = "0";
+        userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
+        document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
+    }
+
+    talkBtn.addEventListener('click', async () => {
+        await initAndUnlockAudio();
+
+        if (!isConnected) {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true }, 
+                    video: false 
+                });
+
+                isConnected = true;
+                talkBtn.classList.add('active');
+                btnLabel.textContent = "TRENNEN";
+
+                connectToServer();
+
+            } catch (err) {
+                alert("Mikrofon-Zugriff erforderlich.");
+            }
+        } else {
+            disconnect();
+        }
+    });
+</script>
