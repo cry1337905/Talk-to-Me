@@ -186,11 +186,11 @@
         }
 
         .radar-blip {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             background-color: #00ffff;
             border-radius: 50%;
-            box-shadow: 0 0 10px #00ffff;
+            box-shadow: 0 0 12px #00ffff;
         }
 
         .radar-blip-label {
@@ -238,8 +238,8 @@
         .user-dist { color: var(--accent-cyan); font-weight: 700; }
 
         .talk-btn {
-            width: 120px;
-            height: 120px;
+            width: 110px;
+            height: 110px;
             border-radius: 50%;
             border: none;
             background: linear-gradient(145deg, #131b2e, #0b101d);
@@ -253,16 +253,35 @@
             z-index: 2;
             transition: all 0.3s ease;
             -webkit-tap-highlight-color: transparent;
+            margin-bottom: 12px;
         }
 
-        .talk-btn svg { width: 36px; height: 36px; fill: var(--text-secondary); }
-        .talk-btn span { font-size: 0.75rem; margin-top: 6px; font-weight: 700; color: var(--text-secondary); }
+        .talk-btn svg { width: 32px; height: 32px; fill: var(--text-secondary); }
+        .talk-btn span { font-size: 0.7rem; margin-top: 4px; font-weight: 700; color: var(--text-secondary); }
 
         .talk-btn.active {
             background: linear-gradient(145deg, #1f1015, #2b090a);
             box-shadow: 0 0 25px var(--active-glow);
         }
         .talk-btn.active svg, .talk-btn.active span { fill: var(--active-red); color: var(--active-red); }
+
+        /* LIVE DIAGNOSE KONSOLE */
+        .debug-console {
+            width: 100%;
+            max-width: 320px;
+            background: #000;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            border-radius: 10px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 0.65rem;
+            color: #00ff00;
+            height: 90px;
+            overflow-y: auto;
+            text-align: left;
+            word-break: break-all;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -308,11 +327,16 @@
         <span id="btnLabel">VERBINDEN</span>
     </button>
 
+    <!-- LIVE LOG AUF DEM HANDY DISPLAY -->
+    <div class="debug-console" id="debugLog">System bereit. Warte auf Verbindung...</div>
+
     <script>
-        // Deine exakte Render Web-Socket Adresse
         const RENDER_WEBSOCKET_URL = "wss://talk-to-me-spcc.onrender.com/ws";
 
-        let myUsername = "Anonym";
+        // Generiere eine eindeutige ID pro Gerät
+        let myClientId = "user_" + Math.random().toString(36).substring(2, 9);
+        let myUsername = "Anonym_" + Math.floor(Math.random() * 899 + 100);
+
         let isConnected = false;
         let socket = null;
         let audioContext = null;
@@ -336,12 +360,20 @@
         const userContainer = document.getElementById('userContainer');
         const radarBox = document.getElementById('radarBox');
         const gpsStatus = document.getElementById('gpsStatus');
+        const debugLog = document.getElementById('debugLog');
+
+        function log(msg) {
+            console.log(msg);
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            debugLog.innerHTML = `[${time}] ${msg}<br>` + debugLog.innerHTML;
+        }
 
         startAppBtn.addEventListener('click', () => {
             const name = usernameInput.value.trim();
             if (name.length > 0) {
                 myUsername = name;
                 nameModal.style.display = 'none';
+                log("Name gesetzt: " + myUsername);
             }
         });
 
@@ -361,19 +393,19 @@
         }
 
         function connectToServer() {
-            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Render... (Bitte max 30s warten falls Render schläft)</div>`;
+            log("Verbinde mit Server...");
+            userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--accent-cyan); text-align: center;">Verbinde mit Server...</div>`;
 
             try {
                 socket = new WebSocket(RENDER_WEBSOCKET_URL);
                 socket.binaryType = "arraybuffer";
 
                 socket.onopen = () => {
-                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Empfange Daten...</div>`;
+                    log("WebSocket Verbunden!");
+                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #10b981; text-align: center;">Verbunden! Sende Position...</div>`;
                     
-                    // Sofort-Handshake
                     dispatchLocation(currentLat, currentLng);
                     
-                    // Dauersignal alle 2 Sek.
                     heartbeatInterval = setInterval(() => {
                         dispatchLocation(currentLat, currentLng);
                     }, 2000);
@@ -384,14 +416,17 @@
 
                 socket.onmessage = (event) => {
                     if (typeof event.data === "string") {
+                        log("EMPFANGEN: " + event.data);
                         try {
                             const data = JSON.parse(event.data);
-                            if (data.type === 'radar_update') {
-                                totalOnlineCount.textContent = String(data.total_online);
-                                updateRadarUI(data.nearby_users);
-                            }
+
+                            const onlineTotal = data.total_online ?? data.online_count ?? data.total ?? data.online ?? 1;
+                            totalOnlineCount.textContent = String(onlineTotal);
+
+                            const userList = data.nearby_users || data.users || data.clients || data.list || [];
+                            updateRadarUI(userList);
                         } catch (e) {
-                            console.error("Fehler beim Empfang:", e);
+                            log("JSON Parse-Fehler: " + e.message);
                         }
                     } else if (event.data instanceof ArrayBuffer) {
                         playIncomingPCM(event.data);
@@ -399,17 +434,15 @@
                 };
 
                 socket.onerror = (err) => {
-                    console.error("WebSocket Fehler:", err);
-                    userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #ef4444; text-align: center;">Fehler beim Verbinden. Ist der Render-Server gestartet?</div>`;
+                    log("WS-Fehler aufgetreten!");
                 };
 
                 socket.onclose = () => {
-                    if (isConnected) {
-                        disconnect();
-                    }
+                    log("WS-Verbindung geschlossen.");
+                    if (isConnected) disconnect();
                 };
             } catch (err) {
-                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: #ef4444; text-align: center;">Netzwerkfehler!</div>`;
+                log("Verbindungs-Fehler: " + err.message);
             }
         }
 
@@ -424,7 +457,7 @@
                         dispatchLocation(currentLat, currentLng);
                     },
                     (err) => {
-                        gpsStatus.textContent = "GPS eingeschränkt. Standard-Ort verwendet.";
+                        gpsStatus.textContent = "GPS eingeschränkt. Standardort genutzt.";
                         gpsStatus.style.color = "#ef4444";
                         dispatchLocation(currentLat, currentLng);
                     },
@@ -437,32 +470,45 @@
             if (socket && socket.readyState === WebSocket.OPEN) {
                 const payload = JSON.stringify({
                     type: 'location',
-                    lat: lat,
-                    lng: lng,
-                    username: myUsername
+                    action: 'location',
+                    id: myClientId,
+                    client_id: myClientId,
+                    lat: parseFloat(lat),
+                    latitude: parseFloat(lat),
+                    lng: parseFloat(lng),
+                    longitude: parseFloat(lng),
+                    username: myUsername,
+                    name: myUsername
                 });
                 socket.send(payload);
             }
         }
 
         function updateRadarUI(users) {
-            nearbyCount.textContent = String(users.length);
-            
+            if (!Array.isArray(users)) users = [];
+
+            // Filtere ggf. sich selbst heraus, falls der Server das nicht tut
+            const otherUsers = users.filter(u => (u.id !== myClientId && u.client_id !== myClientId && u.username !== myUsername));
+
+            nearbyCount.textContent = String(otherUsers.length);
             document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
             userContainer.innerHTML = '';
 
-            if (users.length === 0) {
-                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in 500m</div>`;
+            if (otherUsers.length === 0) {
+                userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Keine anderen Personen in 500m Umkreis.</div>`;
                 return;
             }
 
             const radarRadius = 130;
             const maxDistance = 500;
 
-            users.forEach((user, index) => {
+            otherUsers.forEach((user, index) => {
+                const username = user.username || user.name || user.id || "User";
+                const distance = Math.round(user.distance ?? user.dist ?? 0);
+
                 const item = document.createElement('div');
                 item.className = 'user-item';
-                item.innerHTML = `<span class="user-name">${user.username}</span><span class="user-dist">${user.distance}m</span>`;
+                item.innerHTML = `<span class="user-name">${username}</span><span class="user-dist">${distance}m</span>`;
                 userContainer.appendChild(item);
 
                 const container = document.createElement('div');
@@ -473,18 +519,22 @@
 
                 const label = document.createElement('div');
                 label.className = 'radar-blip-label';
-                label.textContent = `${user.username} (${user.distance}m)`;
+                label.textContent = `${username} (${distance}m)`;
 
                 container.appendChild(blip);
                 container.appendChild(label);
 
-                let pxX = (user.x / maxDistance) * radarRadius;
-                let pxY = (user.y / maxDistance) * radarRadius;
+                let xVal = user.x ?? user.rel_x ?? 0;
+                let yVal = user.y ?? user.rel_y ?? 0;
 
+                let pxX = (xVal / maxDistance) * radarRadius;
+                let pxY = (yVal / maxDistance) * radarRadius;
+
+                // Versatz für nahe beieinander stehende Punkte
                 if (Math.abs(pxX) < 15 && Math.abs(pxY) < 15) {
                     const angle = ((index + 1) * 72) * (Math.PI / 180);
-                    pxX = Math.cos(angle) * 40;
-                    pxY = Math.sin(angle) * 40;
+                    pxX = Math.cos(angle) * 50;
+                    pxY = Math.sin(angle) * 50;
                 }
 
                 container.style.left = `${130 + pxX}px`;
@@ -566,6 +616,7 @@
             nearbyCount.textContent = "0";
             userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
             document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
+            log("Verbindung getrennt.");
         }
 
         talkBtn.addEventListener('click', async () => {
@@ -586,6 +637,7 @@
 
                 } catch (err) {
                     alert("Mikrofon-Zugriff erforderlich.");
+                    log("Mikrofon-Zugriff verweigert.");
                 }
             } else {
                 disconnect();
