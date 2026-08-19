@@ -393,7 +393,7 @@
                 if (diff > 180) diff -= 360;
                 if (diff < -180) diff += 360;
                 
-                smoothedHeading = (smoothedHeading + diff * 0.2 + 360) % 360;
+                smoothedHeading = (smoothedHeading + diff * 0.05 360) % 360;
                 currentHeading = smoothedHeading;
                 compassHeadingVal.textContent = Math.round(currentHeading) + "°";
 
