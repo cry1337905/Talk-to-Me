@@ -1,14 +1,21 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
-  "display": "standalone",
-  "name": "TalkToMe",
-  "orientation": "any",
-  "scope": "/",
   "short_name": "TalkToMe",
-  "start_url": "https://cry1337905.github.io/Talk-to-Me/",
-  "theme_color": "#ffffff",
-  "id": "TalkToMe",
-  "lang": "de",
-  "description": "Eine Sprach-App zur Kommunikation."
+  "name": "Talk to Me Radar",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/854/854878.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/854/854878.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b0f17",
+  "display": "standalone",
+  "orientation": "portrait"
 }
