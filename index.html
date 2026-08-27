@@ -447,9 +447,10 @@
                     
                     dispatchLocation(currentLat, currentLng);
                     
+                    // Regelmäßige Heartbeat-Übermittlung an den Server (alle 3 Sekunden)
                     heartbeatInterval = setInterval(() => {
                         dispatchLocation(currentLat, currentLng);
-                    }, 2000);
+                    }, 3000);
 
                     startGPSWatch();
                     startPCMStreaming();
@@ -504,6 +505,7 @@
                 const payload = JSON.stringify({
                     type: 'location',
                     action: 'location',
+                    status: 'heartbeat',
                     id: myClientId,
                     client_id: myClientId,
                     lat: parseFloat(lat),
@@ -662,6 +664,18 @@
         }
 
         function disconnect() {
+            // Signal zum Trennen an den Server senden
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({
+                        type: 'disconnect',
+                        action: 'disconnect',
+                        id: myClientId,
+                        client_id: myClientId
+                    }));
+                } catch (e) {}
+            }
+
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
             if (heartbeatInterval !== null) clearInterval(heartbeatInterval);
             if (audioProcessor) { audioProcessor.disconnect(); audioProcessor = null; }
@@ -677,6 +691,13 @@
             userContainer.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;">Getrennt</div>`;
             document.querySelectorAll('.radar-blip-container').forEach(el => el.remove());
         }
+
+        // Sendet beim Schließen/Verlassen der App im Hintergrund das Trenn-Signal
+        window.addEventListener('pagehide', () => {
+            if (isConnected) {
+                disconnect();
+            }
+        });
 
         talkBtn.addEventListener('click', async () => {
             await initAndUnlockAudio();
